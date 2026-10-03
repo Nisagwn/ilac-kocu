@@ -1,0 +1,54 @@
+import os
+
+os.environ.setdefault("DATABASE_URL", "sqlite://")
+os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-test-secret-32b")
+
+import pytest
+from fastapi.testclient import TestClient
+from sqlalchemy import create_engine
+from sqlalchemy.orm import sessionmaker
+from sqlalchemy.pool import StaticPool
+
+from app.db import Base, get_db
+from app.main import app
+
+engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
+TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+@pytest.fixture()
+def db():
+    Base.metadata.create_all(engine)
+    session = TestingSession()
+    yield session
+    session.close()
+    Base.metadata.drop_all(engine)
+
+
+@pytest.fixture()
+def client(db):
+    app.dependency_overrides[get_db] = lambda: db
+    with TestClient(app) as c:
+        yield c
+    app.dependency_overrides.clear()
+
+
+def register(client, email, role="patient", **extra):
+    body = {"email": email, "password": "sifre1234", "full_name": email.split("@")[0].title(), "role": role}
+    if role == "patient":
+        body.update(consent=True, has_diabetes=True)
+    body.update(extra)
+    r = client.post("/auth/register", json=body)
+    assert r.status_code == 201, r.text
+    tok = client.post("/auth/login", data={"username": email, "password": "sifre1234"}).json()["access_token"]
+    return r.json(), {"Authorization": f"Bearer {tok}"}
+
+
+@pytest.fixture()
+def patient(client):
+    return register(client, "ayse@example.com")
+
+
+@pytest.fixture()
+def clinician(client):
+    return register(client, "dr.mehmet@example.com", role="clinician", title="Uzm. Dr.")
