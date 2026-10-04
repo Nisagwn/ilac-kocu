@@ -7,6 +7,7 @@ os.environ.setdefault("REMINDERS_ENABLED", "false")  # arka plan zamanlayıcıs�
 os.environ["ANTHROPIC_API_KEY"] = ""
 os.environ["OPENROUTER_API_KEY"] = ""
 os.environ["COACH_PROVIDER"] = "rule"
+os.environ["REDIS_URL"] = ""  # testler Redis olmadan (süreç içi yedeklerle) koşar
 
 import pytest
 from fastapi.testclient import TestClient
@@ -19,6 +20,18 @@ from app.main import app
 
 engine = create_engine("sqlite://", connect_args={"check_same_thread": False}, poolclass=StaticPool)
 TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=False)
+
+
+@pytest.fixture(autouse=True)
+def _isolate_shared_state():
+    """İstek sınırı sayaçları ve Redis istemcisi testler arasında taşınmaz."""
+    from app.redis_client import reset_redis
+    from app.services.ratelimit import reset_local_limits
+
+    reset_local_limits()
+    reset_redis(None)
+    yield
+    reset_local_limits()
 
 
 @pytest.fixture()
