@@ -18,6 +18,7 @@ from typing import Any
 import httpx
 
 from app.config import Settings
+from app.observability import record_rate_limited
 
 # OpenAI finish_reason -> Anthropic stop_reason
 _STOP_REASONS = {
@@ -200,6 +201,8 @@ class OpenRouterClient:
         payload = build_payload(self.settings, **kwargs)
         for attempt in range(RATE_LIMIT_RETRIES + 1):
             resp = self._http.post("/chat/completions", json=payload)
+            if resp.status_code == 429:
+                record_rate_limited()
             if resp.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
                 break
             wait = _retry_after(resp, attempt)

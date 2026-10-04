@@ -117,11 +117,15 @@ sequenceDiagram
 
 ## 3. Dağıtım (Docker Compose)
 
+![Mimari şeması](../gorseller/12-mimari.png)
+
 | Servis | İmaj | Port | Not |
 |---|---|---|---|
-| `db` | `pgvector/pgvector:pg16` | 5432 | `pgdata` volume, healthcheck |
-| `redis` | `redis:7-alpine` | 6379 | önbellek |
-| `api` | `./backend` (python:3.12-slim, root olmayan kullanıcı) | 8000 | açılışta `alembic upgrade head`; APScheduler aynı süreçte |
+| `db` | `pgvector/pgvector:pg16` | 127.0.0.1:5433 | `pgdata` volume, healthcheck; yalnız yerel geliştirme için dışarı açık |
+| `redis` | `redis:7-alpine` | — (iç ağ) | koç iş kuyruğu, istek sınırı sayaçları, token iptal listesi, openFDA ve özet önbelleği |
+| `migrate` | `ilac-kocu-backend` | — | tek seferlik `alembic upgrade head`; api ve worker başarıyla bitmesini bekler |
+| `api` | `./backend` (python:3.12-slim, root olmayan kullanıcı) | 127.0.0.1:8000 | yalnız istek karşılar; LLM gerektiren koç mesajlarını kuyruğa koyar; `/metrics` |
+| `worker` | `ilac-kocu-backend`, `python -m app.worker` | — (`:9101/metrics` iç ağ) | koç işlerini işler (LLM araç döngüsü), tek APScheduler kopyası |
 | `web` | `./frontend` (Next.js `standalone`, root olmayan kullanıcı) | 3000 | `API_URL=http://api:8000` — backend adresi tarayıcıya açılmaz |
 
 ## 4. Monorepo yapısı

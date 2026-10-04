@@ -6,11 +6,11 @@ TR ticari isim -> etken madde eşlemesi yapılır, sorgu etken madde (generic_na
 
 import json
 import logging
-from typing import Any
 
 import httpx
 
 from app.config import get_settings
+from app.redis_client import get_redis
 from app.services.guardrails import normalize
 
 # Küçük, kürate eşleme tablosu (genişletilebilir). Anahtarlar normalize edilmiş.
@@ -116,7 +116,8 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
 
 # ---------------------------------------------------------------- önbellek
 class LabelCache:
-    """openFDA etiket önbelleği: REDIS_URL tanımlıysa Redis (24 saat TTL), değilse süreç içi sözlük.
+    """openFDA etiket önbelleği: ortak Redis istemcisi (app.redis_client.get_redis) varsa Redis (24 saat TTL,
+    JSON metin; istemci decode_responses=True), değilse süreç içi sözlük.
 
     Redis'e ulaşılamazsa sessizce süreç içi önbelleğe düşer; önbellek hatası isteği asla bozmaz."""
 
@@ -124,21 +125,10 @@ class LabelCache:
 
     def __init__(self) -> None:
         self._memory: dict[str, dict] = {}
-        self._redis: Any = None
-        self._redis_checked = False
 
-    def _client(self):
-        if not self._redis_checked:
-            self._redis_checked = True
-            url = get_settings().redis_url
-            if url:
-                try:
-                    import redis
-
-                    self._redis = redis.Redis.from_url(url, socket_timeout=2, socket_connect_timeout=2)
-                except Exception:  # pragma: no cover - yapılandırma hatası
-                    log.warning("Redis istemcisi oluşturulamadı; süreç içi önbellek kullanılıyor", exc_info=True)
-        return self._redis
+    @staticmethod
+    def _client():
+        return get_redis()
 
     def get(self, key: str) -> dict | None:
         r = self._client()

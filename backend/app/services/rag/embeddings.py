@@ -7,6 +7,12 @@ sözcüksel benzerliği aksan/ek farklarına dayanıklı biçimde yakalar.
 
 İsteğe bağlı: `VoyageEmbedding` — EMBEDDING_PROVIDER=voyage ve VOYAGE_API_KEY tanımlıysa
 Voyage AI REST API'si (httpx, SDK'sız) kullanılır.
+
+İsteğe bağlı: `FastEmbedEmbedding` — EMBEDDING_PROVIDER=fastembed ile yerel (CPU, ONNX) ve anlamsal,
+çok dilli `intfloat/multilingual-e5-small` modeli (384 boyut; mevcut vector(384) sütunu, migration yok).
+`fastembed` paketi varsayılan bağımlılıklarda yoktur (requirements-ml.txt); yüklenemezse uyarı loglanır ve
+yerel embedding'e düşülür. Sağlayıcı değişince `embedding_model` farklılaştığı için satırlar ilk aramada ya da
+`python -m app.services.rag.reindex` ile yeniden embed edilir.
 """
 
 from __future__ import annotations
@@ -228,12 +234,86 @@ class VoyageEmbedding:
         return self._call([text], "query")[0]
 
 
+class FastEmbedEmbedding:
+    """fastembed (ONNX, yerel) ile anlamsal embedding. e5 ailesi modeller asimetrik eğitilmiştir:
+    sorgular "query: ", belgeler "passage: " önekiyle embed edilmelidir."""
+
+    QUERY_PREFIX = "query: "
+    PASSAGE_PREFIX = "passage: "
+    BATCH_SIZE = 32
+
+    def __init__(self, model_name: str = "intfloat/multilingual-e5-small", cache_dir: str | None = None,
+                 dim: int = EMBEDDING_DIM, model=None):
+        self.model_name = model_name
+        self.dim = dim
+        self.model_id = f"fastembed:{model_name}:{dim}"
+        self._model = model if model is not None else _load_fastembed_model(model_name, cache_dir, dim)
+        self._uses_prefix = "e5" in model_name.lower()
+
+    def _embed(self, texts: list[str], prefix: str) -> list[list[float]]:
+        if self._uses_prefix:
+            texts = [prefix + t for t in texts]
+        out: list[list[float]] = []
+        for vec in self._model.embed(texts, batch_size=self.BATCH_SIZE):
+            values = [float(x) for x in vec]
+            if len(values) != self.dim:
+                raise ValueError(f"{self.model_name} {len(values)} boyut döndürdü, {self.dim} bekleniyordu")
+            out.append(l2_normalize(values))
+        return out
+
+    def embed_documents(self, texts: list[str]) -> list[list[float]]:
+        return self._embed(texts, self.PASSAGE_PREFIX)
+
+    def embed_query(self, text: str) -> list[float]:
+        return self._embed([text], self.QUERY_PREFIX)[0]
+
+
+def _load_fastembed_model(model_name: str, cache_dir: str | None, dim: int):
+    """fastembed.TextEmbedding örneği (tembel içe aktarma). Model fastembed'in hazır listesinde yoksa
+    Hugging Face'teki ONNX dosyasıyla özel model olarak kaydedilir (ortalama havuzlama + normalize)."""
+    from fastembed import TextEmbedding
+
+    kwargs = {"cache_dir": cache_dir} if cache_dir else {}
+    try:
+        return TextEmbedding(model_name=model_name, **kwargs)
+    except ValueError:  # desteklenmeyen model adı
+        from fastembed.common.model_description import ModelSource, PoolingType
+
+        TextEmbedding.add_custom_model(
+            model=model_name, pooling=PoolingType.MEAN, normalization=True,
+            sources=ModelSource(hf=model_name), dim=dim, model_file="onnx/model.onnx",
+        )
+        return TextEmbedding(model_name=model_name, **kwargs)
+
+
+@lru_cache(maxsize=2)
+def _fastembed_provider(model_name: str, cache_dir: str | None) -> EmbeddingProvider:
+    # Model yükleme pahalıdır (ONNX oturumu): süreç başına bir kez; başarısızlık da önbelleğe alınır (log taşmasın)
+    try:
+        return FastEmbedEmbedding(model_name, cache_dir)
+    except ImportError:
+        log.warning("EMBEDDING_PROVIDER=fastembed ama 'fastembed' paketi yüklü değil (pip install -r "
+                    "requirements-ml.txt); yerel embedding kullanılıyor")
+    except Exception as exc:
+        log.warning("fastembed modeli (%s) yüklenemedi (%s); yerel embedding kullanılıyor", model_name,
+                    type(exc).__name__)
+    return LocalHashEmbedding()
+
+
+def reset_provider_cache() -> None:
+    """Testler için: önbelleğe alınmış fastembed sağlayıcısını sıfırlar."""
+    _fastembed_provider.cache_clear()
+
+
 def get_provider() -> EmbeddingProvider:
     s = get_settings()
-    if s.embedding_provider == "voyage":
+    provider = (s.embedding_provider or "local").lower()
+    if provider == "voyage":
         if s.voyage_api_key:
             return VoyageEmbedding(s.voyage_api_key, s.voyage_model)
         log.warning("EMBEDDING_PROVIDER=voyage ama VOYAGE_API_KEY yok; yerel embedding kullanılıyor")
+    elif provider == "fastembed":
+        return _fastembed_provider(s.fastembed_model, s.fastembed_cache_dir)
     return LocalHashEmbedding()
 
 

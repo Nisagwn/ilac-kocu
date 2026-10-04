@@ -1,26 +1,29 @@
 import { NextResponse } from "next/server";
-import { API_URL, ROLE_COOKIE, TOKEN_COOKIE } from "@/lib/server";
+import { API_URL, clientIpFrom, setAuthCookies, type TokenPair } from "@/lib/server";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
+  const headers: Record<string, string> = { "Content-Type": "application/x-www-form-urlencoded" };
+  // Backend IP başına giriş sınırı uygular; gerçek istemci IP'si iletilir (güven varsayımı: lib/server.ts)
+  const ip = clientIpFrom(req);
+  if (ip) headers["X-Forwarded-For"] = ip;
+
   const res = await fetch(`${API_URL}/auth/login`, {
     method: "POST",
-    headers: { "Content-Type": "application/x-www-form-urlencoded" },
+    headers,
     body: new URLSearchParams({ username: email ?? "", password: password ?? "" }),
+    cache: "no-store",
   });
   const body = await res.json().catch(() => ({}));
-  if (!res.ok) return NextResponse.json(body, { status: res.status });
+  if (!res.ok) {
+    const out = NextResponse.json(body, { status: res.status });
+    const retryAfter = res.headers.get("retry-after");
+    if (retryAfter) out.headers.set("Retry-After", retryAfter);
+    return out;
+  }
 
-  const out = NextResponse.json({ role: body.role });
-  const opts = {
-    httpOnly: true,
-    sameSite: "lax" as const,
-    secure: process.env.NODE_ENV === "production",
-    path: "/",
-    maxAge: 60 * 60,
-  };
-  out.cookies.set(TOKEN_COOKIE, body.access_token, opts);
-  // Rol çerezi yalnızca yönlendirme içindir; yetki kararı her zaman backend'de JWT ile verilir.
-  out.cookies.set(ROLE_COOKIE, body.role, opts);
+  const pair = body as TokenPair;
+  const out = NextResponse.json({ role: pair.role });
+  setAuthCookies(out, pair);
   return out;
 }

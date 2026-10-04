@@ -15,6 +15,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.models import LlmUsage
+from app.observability import record_llm_usage
 from app.services.llm.pricing import cost_usd
 
 
@@ -118,4 +119,6 @@ def record_usage(db: Session, patient_id: int | None, purpose: str, totals: Usag
         cost_usd=totals.cost_usd,
     )
     db.add(row)
+    record_llm_usage(purpose, totals.model, totals.input_tokens, totals.output_tokens, totals.cache_read_tokens,
+                     totals.cache_write_tokens, row.cost_usd)
     return row

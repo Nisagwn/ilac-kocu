@@ -12,17 +12,40 @@ class Settings(BaseSettings):
 
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
-    jwt_expire_minutes: int = 60
+    jwt_expire_minutes: int = 15  # erişim token'ı kısa ömürlü; oturum yenileme token'ıyla sürer
+    refresh_token_days: int = 14  # yenileme token'ı ömrü (her kullanımda döndürülür)
+
+    # --- Giriş/kayıt istek sınırı ---
+    login_ip_limit: int = 5  # IP başına, login_ip_window_seconds içinde
+    login_ip_window_seconds: int = 60
+    login_email_limit: int = 10  # e-posta başına, login_email_window_seconds içinde
+    login_email_window_seconds: int = 900
+    register_ip_limit: int = 5  # IP başına saatlik kayıt
+    register_ip_window_seconds: int = 3600
+    # X-Forwarded-For yalnızca bu adreslerden (IP ya da CIDR) gelen isteklerde dikkate alınır.
+    # Varsayılan: aynı makinedeki Next.js sunucusu. Docker'da web konteynerinin ağı eklenmeli
+    # (ör. ["172.16.0.0/12"]) ve API portu dışarıya açılmamalıdır.
+    trusted_proxies: list[str] = ["127.0.0.1", "::1"]
 
     openfda_base_url: str = "https://api.fda.gov/drug/label.json"
     openfda_api_key: str | None = None
     redis_url: str | None = None  # varsa openFDA etiket önbelleği Redis'te, yoksa süreç içi
 
     # --- M4: RAG (eğitim içeriği) ---
-    embedding_provider: str = "local"  # "local" (çevrimdışı, deterministik) | "voyage" (VOYAGE_API_KEY gerekir)
+    # "local" (çevrimdışı, deterministik) | "voyage" (VOYAGE_API_KEY gerekir)
+    # | "fastembed" (anlamsal, çok dilli; requirements-ml.txt gerekir, yoksa yerel embedding'e düşer)
+    embedding_provider: str = "local"
     voyage_api_key: str | None = None
     voyage_model: str = "voyage-3.5-lite"
+    fastembed_model: str = "intfloat/multilingual-e5-small"  # 384 boyut (vector(384) sütunu, migration yok)
+    fastembed_cache_dir: str | None = None  # model dosyalarının indirileceği dizin (boş = fastembed varsayılanı)
     rag_min_score: float = 0.25  # bu hibrit skorun altındaki sonuçlar döndürülmez
+
+    # --- Gözlemlenebilirlik (app/observability.py) ---
+    metrics_enabled: bool = True  # /metrics (Prometheus); false ise 404
+    # Worker metrikleri: worker süreci (koç LLM çağrıları burada) bu portta Prometheus sunar; yalnız iç ağ
+    worker_metrics_port: int = 9101
+    metrics_token: str | None = None  # tanımlıysa /metrics için "Authorization: Bearer <token>" zorunlu
 
     cors_origins: list[str] = ["http://localhost:3000"]
 
@@ -31,6 +54,12 @@ class Settings(BaseSettings):
     vapid_private_key: str | None = None
     vapid_subject: str = "mailto:admin@example.com"
     reminders_enabled: bool = True  # doz hatırlatma zamanlayıcısı (VAPID anahtarları da gerekir)
+    # Zamanlayıcı normalde kuyruk işçisinde (python -m app.worker) çalışır; tek süreçli geliştirme için True
+    run_scheduler_in_api: bool = False
+
+    # --- Asenkron koç işleri (POST /coach/jobs, app/worker.py) ---
+    coach_job_stale_minutes: int = 10  # bu süreden uzun "running" kalan işler işçi açılışında kurtarılır
+    coach_job_max_attempts: int = 2  # bu kadar denemeden sonra iş kural tabanlı yanıtla kapatılır
 
     # --- M4: LLM koç ---
     # Sağlayıcı: "auto" (OPENROUTER_API_KEY varsa OpenRouter, yoksa ANTHROPIC_API_KEY varsa Anthropic),

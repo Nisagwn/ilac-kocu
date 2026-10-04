@@ -1,7 +1,9 @@
 """Koç servisi.
 
-Akış: Katman 1 (girdi guardrail) -> Provider (Claude tool-use koç veya kural tabanlı koç)
-      -> Katman 3 (çıktı guardrail) -> kayıt + gerekirse hekime alert.
+Akış: Katman 1 (girdi guardrail, run_input_stage) -> Provider (Claude tool-use koç veya kural tabanlı koç)
+      -> Katman 3 (çıktı guardrail) -> kayıt + gerekirse hekime alert (run_provider_stage).
+Senkron sohbet handle_message ile iki aşamayı art arda çalıştırır; asenkron işler (app/services/jobs.py)
+girdi aşamasını istekte, provider aşamasını kuyruk işçisinde (app/worker.py) çalıştırır.
 
 Provider seçimi get_coach_provider(): ANTHROPIC_API_KEY varsa ve COACH_PROVIDER != "rule" ise
 ClaudeCoachProvider (app/services/llm/coach_agent.py), aksi halde RuleBasedCoach. Her iki provider da
@@ -150,10 +152,25 @@ def _alert(db: Session, patient_id: int, severity: Severity, kind: str, message:
     db.add(Alert(patient_id=patient_id, severity=severity, kind=kind, message=message))
 
 
-def handle_message(db: Session, patient: Patient, message: str, provider: CoachProvider | None = None) -> CoachReply:
-    provider = provider or RuleBasedCoach()
+def save_patient_message(db: Session, patient: Patient, message: str) -> None:
+    """Hasta mesajını oturuma ekler (commit etmez)."""
     db.add(CoachMessage(patient_id=patient.id, sender=Sender.patient, content=message))
 
+
+def _save_coach_reply(db: Session, patient: Patient, reply: CoachReply) -> None:
+    db.add(
+        CoachMessage(
+            patient_id=patient.id, sender=Sender.coach, content=reply.message, risk_level=reply.risk_level,
+            escalate_to_clinician=reply.escalate_to_clinician,
+            sources=[s.model_dump() for s in reply.sources], guardrail_action=reply.guardrail_action,
+        )
+    )
+
+
+def run_input_stage(db: Session, patient: Patient, message: str) -> CoachReply | None:
+    """Katman 1 (deterministik girdi guardrail'i). Acil belirti / kendine zarar / doz sorusu tetiklenirse
+    güvenli yanıtı döndürür, gerekli alert'i ve koç yanıtını oturuma ekler (commit çağıranda);
+    tetiklenmezse None döner ve mesaj provider aşamasına gider. Bu aşama asla kuyrukta beklemez."""
     check = gr.check_input(message)
     if check.action == gr.Action.self_harm:
         reply = CoachReply(
@@ -174,28 +191,45 @@ def handle_message(db: Session, patient: Patient, message: str, provider: CoachP
         )
         _alert(db, patient.id, Severity.info, "dose_question", "Hasta ilaç dozu/değişikliği hakkında soru sordu.")
     else:
-        try:
-            reply = provider.reply(db, patient, message)
-        except Exception as exc:  # sağlayıcı kendi içinde düşemezse son güvenlik ağı
-            logger.warning("Koç sağlayıcısı hata verdi (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
-            reply = RuleBasedCoach().reply(db, patient, message).model_copy(update={"guardrail_action": "llm_fallback"})
-        out = gr.check_output(reply.message)
-        if not out.allowed:
-            reply = CoachReply(
-                message=gr.BLOCKED_OUTPUT_REPLY, risk_level=RiskLevel.medium, escalate_to_clinician=False,
-                guardrail_action=f"{out.action.value}:{out.category}",
-            )
-        elif reply.risk_level == RiskLevel.emergency:
-            _alert(db, patient.id, Severity.critical, "coach_emergency", "Koç yanıtı acil yönlendirme içeriyor.")
-        elif reply.escalate_to_clinician:
-            _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi.")
-
-    db.add(
-        CoachMessage(
-            patient_id=patient.id, sender=Sender.coach, content=reply.message, risk_level=reply.risk_level,
-            escalate_to_clinician=reply.escalate_to_clinician,
-            sources=[s.model_dump() for s in reply.sources], guardrail_action=reply.guardrail_action,
-        )
-    )
-    db.commit()
+        return None
+    _save_coach_reply(db, patient, reply)
     return reply
+
+
+def run_provider_stage(
+    db: Session, patient: Patient, message: str, provider: CoachProvider | None = None, *, commit: bool = True
+) -> CoachReply:
+    """Provider (LLM veya kural tabanlı) -> Katman 3 (çıktı guardrail) -> koç yanıtı kaydı + gerekirse alert.
+
+    Hasta mesajını KAYDETMEZ (çağıran kaydeder). Senkron sohbet ve kuyruk işçisi aynı hattı kullanır.
+    commit=False ise commit çağırana bırakılır (işçi, iş durumunu aynı işlemde günceller)."""
+    provider = provider or RuleBasedCoach()
+    try:
+        reply = provider.reply(db, patient, message)
+    except Exception as exc:  # sağlayıcı kendi içinde düşemezse son güvenlik ağı
+        logger.warning("Koç sağlayıcısı hata verdi (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
+        reply = RuleBasedCoach().reply(db, patient, message).model_copy(update={"guardrail_action": "llm_fallback"})
+    out = gr.check_output(reply.message)
+    if not out.allowed:
+        reply = CoachReply(
+            message=gr.BLOCKED_OUTPUT_REPLY, risk_level=RiskLevel.medium, escalate_to_clinician=False,
+            guardrail_action=f"{out.action.value}:{out.category}",
+        )
+    elif reply.risk_level == RiskLevel.emergency:
+        _alert(db, patient.id, Severity.critical, "coach_emergency", "Koç yanıtı acil yönlendirme içeriyor.")
+    elif reply.escalate_to_clinician:
+        _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi.")
+    _save_coach_reply(db, patient, reply)
+    if commit:
+        db.commit()
+    return reply
+
+
+def handle_message(db: Session, patient: Patient, message: str, provider: CoachProvider | None = None) -> CoachReply:
+    """Senkron koç hattı (POST /coach/chat, eval_coach ve testler): girdi aşaması + provider aşaması."""
+    save_patient_message(db, patient, message)
+    reply = run_input_stage(db, patient, message)
+    if reply is not None:
+        db.commit()
+        return reply
+    return run_provider_stage(db, patient, message, provider)

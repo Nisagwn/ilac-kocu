@@ -16,16 +16,49 @@ services:
   redis:
     image: redis:7-alpine
 
+  # Şema migration'ları: API ve işçiden önce bir kez koşar, sonra çıkar
+  migrate:
+    build: ./backend
+    image: ilac-kocu-backend
+    command: ["alembic", "upgrade", "head"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
+    restart: "no"
+    depends_on:
+      db:
+        condition: service_healthy
+
   api:
     build: ./backend
+    image: ilac-kocu-backend
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
       REDIS_URL: redis://redis:6379/0
-    ports: ["8000:8000"]
+      # Next.js (web) konteyneri Docker iç ağından gelir; gerçek istemci IP'sini X-Forwarded-For'da iletir
+      TRUSTED_PROXIES: '["127.0.0.1","::1","172.16.0.0/12"]'
+    # Yalnızca bu makineden (Swagger için); dışarıya açık olursa X-Forwarded-For taklit edilebilir
+    ports: ["127.0.0.1:8000:8000"]
     depends_on:
-      db:
-        condition: service_healthy
+      migrate:
+        condition: service_completed_successfully
+      redis:
+        condition: service_started
+
+  # Koç kuyruğu işçisi + doz hatırlatma zamanlayıcısı (API zamanlayıcıyı başlatmaz)
+  worker:
+    build: ./backend  # migrate/api/worker aynı imajı paylaşır (derleme önbellekten gelir)
+    image: ilac-kocu-backend
+    command: ["python", "-m", "app.worker"]
+    env_file: .env
+    environment:
+      DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
+      REDIS_URL: redis://redis:6379/0
+    stop_grace_period: 30s
+    depends_on:
+      migrate:
+        condition: service_completed_successfully
       redis:
         condition: service_started
 

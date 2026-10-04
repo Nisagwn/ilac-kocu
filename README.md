@@ -24,7 +24,7 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | M1 — Proje önerisi ve teknoloji seçimi | 23 Eki 2026 | ✅ `docs/M1/` |
 | M2 — Veritabanı ve backend iskeleti | 13 Kas 2026 | ✅ `backend/` |
 | M3 — Arayüz ve dashboard (MVP) | 11 Ara 2026 | ✅ `frontend/` (Next.js PWA), web push + hatırlatma zamanlayıcısı, 102 backend testi |
-| M4 — Yapay zekâ bileşeni | 1 Oca 2027 | ✅ Claude tool-use koç, RAG (pgvector), maliyet limiti, 232 senaryoluk guardrail seti, 395 backend testi |
+| M4 — Yapay zekâ bileşeni | 1 Oca 2027 | ✅ Claude tool-use koç, RAG (pgvector), maliyet limiti, 232 senaryoluk guardrail seti, 469 backend testi |
 | M5 — Final teslim | 17 Oca 2027 | ✅ rapor, kurulum, demo senaryosu (`docs/M5/`) — video kayıt bekliyor |
 
 ## Ekranlar
@@ -93,6 +93,10 @@ Windows / macOS / Linux adım adım kurulum, Docker'sız geliştirme ve sorun gi
 
 ## Mimari
 
+![Mimari şeması](docs/gorseller/12-mimari.png)
+
+Uzun ve zamanlanmış işler ayrı bir **worker** serviste çalışır; API yalnızca istekleri karşılar. Redis kuyruk, istek sınırı, token iptali ve önbellek için ortak katmandır. Ayrıntı: [docs/M1/05-mimari.md](docs/M1/05-mimari.md).
+
 ```mermaid
 flowchart LR
     subgraph C["Tarayıcı"]
@@ -136,7 +140,9 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 
 | Uç nokta | Açıklama | Rol |
 |---|---|---|
-| `POST /auth/register`, `/auth/login`, `GET /auth/me` | Kayıt (hasta için açık rıza zorunlu), JWT | herkes |
+| `POST /auth/register`, `/auth/login`, `GET /auth/me` | Kayıt (hasta için açık rıza zorunlu), JWT (15 dk) + yenileme token'ı; giriş 5/dk/IP | herkes |
+| `POST /auth/refresh`, `POST /auth/logout` | Yenileme token'ı döndürme (tekrar kullanımda tüm oturumlar kapanır); çıkışta token iptali | herkes |
+| `GET /patients/me/access-log` | Verilerime kimler baktı (KVKK erişim kaydı) | hasta |
 | `GET /patients` | Hekim: hasta listesi (kritik uyarı + düşük uyum önce) | tümü |
 | `GET /patients/{id}/adherence?days=7` | Uyum skoru (alınan / planlanan doz) | okuma |
 | `GET /summaries/{id}` (eski: `/patients/{id}/summary`) | Haftalık özet | okuma |
@@ -148,7 +154,9 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 | `GET /education` | Eğitim içeriği (RAG korpusu) listesi; `kind=curated\|openfda` süzgeci | giriş yapmış herkes |
 | `GET /education/search?q=` | Anlamsal arama (kosinüs + anahtar kelime), kaynaklı sonuçlar | giriş yapmış herkes |
 | `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır) | giriş yapmış herkes |
-| `POST /coach/chat`, `GET /coach/history` | Koç (guardrail'li) | hasta |
+| `POST /coach/jobs`, `GET /coach/jobs/{id}` | Koç: acil/doz mesajı anında (200), diğerleri kuyrukta (202 → sorgu); 10/dk | hasta |
+| `POST /coach/chat`, `GET /coach/history` | Koç senkron (test/değerlendirme), sohbet geçmişi | hasta |
+| `GET /metrics` | Prometheus metrikleri (isteğe bağlı `METRICS_TOKEN`); worker: `:9101/metrics` | operasyon |
 | `GET /push/vapid-public-key`, `POST`/`DELETE /push/subscribe`, `POST /push/test` | Web push aboneliği; doz saatinde (15 dk pencere, günde bir kez) hatırlatma | hasta |
 
 **VAPID anahtarı üretimi:** `npx web-push generate-vapid-keys` (veya Python: `pip install py-vapid && vapid --gen && vapid --applicationServerKey`). Çıkan anahtarları `.env` içindeki `VAPID_PUBLIC_KEY` / `VAPID_PRIVATE_KEY` alanlarına yazın; anahtarlar yoksa push uç noktaları 503 döner ve hatırlatma zamanlayıcısı başlamaz (`REMINDERS_ENABLED=false` ile tamamen kapatılabilir).
@@ -197,7 +205,9 @@ Sağlık verisi KVKK kapsamında özel nitelikli kişisel veridir; yaklaşım "p
 | LLM | Ad / e-posta / kimlik gönderilmez; tool'lara hasta kimliğini sunucu bağlar |
 | Oturum | JWT yalnızca Next.js sunucusunda **httpOnly**, `SameSite=Lax` (üretimde `Secure`) çerezde; tarayıcı JS'i token'ı hiç görmez, tüm çağrılar aynı kökenli `/api/proxy` üzerinden |
 | Cihaz | Service worker `/api/*` yanıtlarını ve kişiye özel sayfaları **önbelleğe almaz** |
-| Diğer | bcrypt şifre hash'i, 60 dk JWT, güvenlik başlıkları, sırlar yalnızca `.env`'de, guardrail olayları içerik olmadan loglanır, yalnızca sentetik veri |
+| Erişim kaydı | Hekim/yakının her hasta verisi okuması `access_logs`'a yazılır (sağlık değeri olmadan); hasta kendi erişim geçmişini görür |
+| Kötüye kullanım | Giriş, kayıt ve koç uç noktalarında istek sınırı (Redis); 15 dk erişim + döndürmeli yenileme token'ı, çıkışta iptal |
+| Diğer | bcrypt şifre hash'i, güvenlik başlıkları, sırlar yalnızca `.env`'de, guardrail olayları içerik olmadan loglanır, yalnızca sentetik veri |
 
 Etik değerlendirme ve zarar senaryoları: [final rapor §11](docs/M5/final-rapor.md#11-etik-ve-güvenlik-değerlendirmesi) · Ölçüt → kanıt eşlemesi: [`etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md)
 
@@ -220,7 +230,7 @@ backend/tests/
 └── test_push.py              VAPID abonelik, hatırlatma zamanlayıcısı
 ```
 
-**Toplam 395 backend testi** geçer (parametrik senaryolar dahil); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live` (API anahtarı gerekir).
+**Toplam 469 backend testi** geçer (parametrik senaryolar dahil); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live` (API anahtarı gerekir).
 
 GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
 

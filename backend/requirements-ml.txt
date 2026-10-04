@@ -1,0 +1,4 @@
+# İsteğe bağlı ML bağımlılıkları (varsayılan kurulumda YOK; Docker imajını büyütmemek için ayrı tutulur).
+# Anlamsal embedding: EMBEDDING_PROVIDER=fastembed (model: intfloat/multilingual-e5-small, 384 boyut, CPU/ONNX).
+# Kurulum: pip install -r requirements.txt -r requirements-ml.txt
+fastembed>=0.5

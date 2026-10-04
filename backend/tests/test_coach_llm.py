@@ -371,3 +371,30 @@ def test_pricing_table():
     assert cost_usd("claude-opus-5-5", 0, 1_000_000) == pytest.approx(20.0)
     assert cost_usd("claude-opus-5-5", 0, 0, cache_read_tokens=1_000_000) == pytest.approx(0.2)
     assert cost_usd("bilinmeyen-model", 1_000_000, 0) == pytest.approx(FALLBACK_PRICE.input)
+
+
+def _occurrences(msgs: list[dict], needle: str) -> int:
+    n = 0
+    for m in msgs:
+        if isinstance(m["content"], str):
+            n += m["content"] == needle
+        else:
+            n += sum(1 for b in m["content"] if isinstance(b, dict) and b.get("text") == needle)
+    return n
+
+
+@pytest.mark.parametrize("already_saved", [True, False])
+def test_current_message_sent_exactly_once(db, pat, already_saved):
+    # İş (job) yolu hasta mesajını sağlayıcıdan önce kaydeder; senkron yol kaydetmeyebilir
+    p, _ = pat
+    for sender, content in [(Sender.patient, "dün unuttum"), (Sender.coach, "olur böyle")]:
+        db.add(CoachMessage(patient_id=p.id, sender=sender, content=content))
+    if already_saved:
+        db.add(CoachMessage(patient_id=p.id, sender=Sender.patient, content="bugün aldım"))
+    db.commit()
+    provider, fake = provider_with([final()])
+    provider.reply(db, p, "bugün aldım")
+    msgs = fake.calls[0]["messages"]
+    assert _occurrences(msgs, "bugün aldım") == 1
+    assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
+    assert msgs[-1]["content"][-1]["text"] == "bugün aldım"  # bağlam bloğuyla birlikte son turda

@@ -4,6 +4,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
+from app.observability import RequestContextMiddleware, metrics_router
 from app.routers import (
     alerts,
     auth,
@@ -24,8 +25,10 @@ settings = get_settings()
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
-    # Doz hatırlatma zamanlayıcısı: yalnızca REMINDERS_ENABLED ve VAPID anahtarları varsa (testlerde asla)
-    scheduler = start_scheduler(settings)
+    # Doz hatırlatma zamanlayıcısı kuyruk işçisinde (python -m app.worker) çalışır; API birden fazla
+    # worker ile koşabildiği için burada başlatılmaz (çift bildirim olur). Tek süreçli geliştirme için
+    # RUN_SCHEDULER_IN_API=true. Her durumda REMINDERS_ENABLED ve VAPID anahtarları gerekir (testlerde asla).
+    scheduler = start_scheduler(settings) if settings.run_scheduler_in_api else None
     yield
     if scheduler is not None:
         scheduler.shutdown(wait=False)
@@ -48,6 +51,9 @@ app.add_middleware(
     allow_methods=["*"],
     allow_headers=["*"],
 )
+# Gözlemlenebilirlik: istek kimliği + JSON erişim logu + Prometheus (en dışta; /metrics OpenAPI'de görünmez)
+app.add_middleware(RequestContextMiddleware)
+app.include_router(metrics_router)
 
 for r in (auth, patients, medications, doses, measurements, alerts, drugs, education, coach, summaries, push):
     app.include_router(r.router)

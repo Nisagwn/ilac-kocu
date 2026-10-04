@@ -1,10 +1,12 @@
+from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from pydantic import BaseModel
 from sqlalchemy import func, select
 
 from app.deps import DB, CurrentUser, get_own_patient, get_patient_for_read, get_patient_for_write, require_roles
-from app.models import Alert, Measurement, Patient, PatientCaregiver, Role, Severity, User
+from app.models import AccessLog, Alert, Measurement, Patient, PatientCaregiver, Role, Severity, User
 from app.schemas import (
     AddCaregiverIn,
     AdherenceOut,
@@ -64,6 +66,39 @@ def list_patients(db: DB, user: CurrentUser):
 @router.get("/me", response_model=PatientOut)
 def my_profile(db: DB, user: CurrentUser):
     return to_out(get_own_patient(db, user))
+
+
+class AccessLogOut(BaseModel):
+    id: int
+    actor_name: str | None  # eriştiren hesap silinmişse None
+    actor_role: str
+    action: str
+    path: str
+    created_at: datetime
+
+
+@router.get("/me/access-log", response_model=list[AccessLogOut])
+def my_access_log(
+    db: DB, user: Annotated[User, Depends(require_roles(Role.patient))],
+    days: Annotated[int, Query(ge=1, le=365)] = 30,
+):
+    """KVKK: hastanın verisine son `days` günde hangi hekim/bakım verenin eriştiği (en yeni önce, en çok 200)."""
+    p = get_own_patient(db, user)
+    since = datetime.now(UTC) - timedelta(days=days)
+    rows = db.execute(
+        select(AccessLog, User.full_name)
+        .outerjoin(User, User.id == AccessLog.actor_user_id)
+        .where(AccessLog.patient_id == p.id, AccessLog.created_at >= since)
+        .order_by(AccessLog.created_at.desc(), AccessLog.id.desc())
+        .limit(200)
+    ).all()
+    return [
+        AccessLogOut(
+            id=log.id, actor_name=name, actor_role=log.actor_role, action=log.action, path=log.path,
+            created_at=log.created_at,
+        )
+        for log, name in rows
+    ]
 
 
 @router.get("/{patient_id}", response_model=PatientOut)

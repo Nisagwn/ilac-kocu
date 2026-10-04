@@ -12,4 +12,6 @@ RUN useradd -m appuser
 USER appuser
 
 EXPOSE 8000
-CMD ["sh", "-c", "alembic upgrade head && uvicorn app.main:app --host 0.0.0.0 --port 8000"]
+# Migration'lar ayrı "migrate" servisinde (docker-compose.yml) bir kez koşar; API açılışında çalışmaz.
+# Kuyruk işçisi aynı imajdan: python -m app.worker
+CMD ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000"]

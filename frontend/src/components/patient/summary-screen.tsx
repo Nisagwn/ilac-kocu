@@ -2,9 +2,9 @@
 
 import { useCallback } from "react";
 import Link from "next/link";
-import { AlertTriangle, Sparkles } from "lucide-react";
+import { AlertTriangle, Eye, Sparkles } from "lucide-react";
 import { Card, CardContent, CardDescription, CardHeader, CardTitle } from "@/components/ui/card";
-import { api } from "@/lib/api";
+import { api, request } from "@/lib/api";
 import type { WeeklySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ErrorState, LoadingState, PageHeader } from "./states";
@@ -22,6 +22,7 @@ export function SummaryScreen({ patientId }: { patientId: number }) {
       {s.loading && !s.data && <LoadingState label="Özet hazırlanıyor…" />}
       {s.error && <ErrorState message={s.error} onRetry={s.reload} />}
       {s.data && <SummaryBody data={s.data} />}
+      <AccessHistoryCard />
     </div>
   );
 }
@@ -144,5 +145,76 @@ function SummaryBody({ data }: { data: WeeklySummary }) {
         </CardContent>
       </Card>
     </>
+  );
+}
+
+// --- KVKK: verilerime kimler baktı ---
+
+type AccessLogEntry = {
+  id: number;
+  actor_name: string | null;
+  actor_role: string;
+  action: string;
+  path: string;
+  created_at: string;
+};
+
+const ROLE_LABEL: Record<string, string> = { clinician: "Hekim", caregiver: "Bakım veren" };
+
+// Backend uç noktası → insanca ekran adı. Sağlık değeri değil, yalnızca hangi bölüme bakıldığı gösterilir.
+const SCREEN_LABEL: [RegExp, string][] = [
+  [/^\/patients\/\d+\/measurements/, "Ölçümler"],
+  [/^\/patients\/\d+\/medications/, "İlaçlar"],
+  [/^\/patients\/\d+\/doses/, "Doz kayıtları"],
+  [/^\/patients\/\d+\/adherence/, "İlaç uyumu"],
+  [/^\/patients\/\d+\/alerts/, "Uyarılar"],
+  [/^\/alerts\/\d+\/ack/, "Uyarı kapatma"],
+  [/^\/patients\/\d+\/summary/, "Haftalık özet"],
+  [/^\/summaries\/\d+/, "Haftalık özet"],
+  [/^\/patients\/\d+\/?$/, "Profil"],
+];
+
+function screenLabel(path: string): string {
+  return SCREEN_LABEL.find(([re]) => re.test(path))?.[1] ?? "Diğer";
+}
+
+const dateFmt = new Intl.DateTimeFormat("tr-TR", { dateStyle: "medium", timeStyle: "short" });
+
+function AccessHistoryCard() {
+  const logs = useAsync(useCallback(() => request<AccessLogEntry[]>("/patients/me/access-log?days=30"), []));
+
+  return (
+    <Card>
+      <CardHeader>
+        <CardTitle className="flex items-center gap-2">
+          <Eye className="size-4 text-teal-700" aria-hidden /> Verilerime kimler baktı
+        </CardTitle>
+        <CardDescription>Son 30 günde hekiminizin ve bakım verenlerinizin eriştiği ekranlar</CardDescription>
+      </CardHeader>
+      <CardContent>
+        {logs.loading && !logs.data && <LoadingState label="Erişim geçmişi yükleniyor…" />}
+        {logs.error && <ErrorState message={logs.error} onRetry={logs.reload} />}
+        {logs.data && logs.data.length === 0 && (
+          <p className="text-sm text-muted-foreground">Son 30 günde verilerinize başka kimse erişmedi.</p>
+        )}
+        {logs.data && logs.data.length > 0 && (
+          <ul className="divide-y text-sm">
+            {logs.data.map((l) => (
+              <li key={l.id} className="flex flex-wrap items-baseline justify-between gap-x-3 gap-y-0.5 py-2">
+                <span>
+                  <span className="font-medium">{l.actor_name ?? "Silinmiş hesap"}</span>{" "}
+                  <span className="text-muted-foreground">({ROLE_LABEL[l.actor_role] ?? l.actor_role})</span>
+                  {" · "}
+                  {screenLabel(l.path)}
+                </span>
+                <time dateTime={l.created_at} className="text-xs text-muted-foreground tabular-nums">
+                  {dateFmt.format(new Date(l.created_at))}
+                </time>
+              </li>
+            ))}
+          </ul>
+        )}
+      </CardContent>
+    </Card>
   );
 }

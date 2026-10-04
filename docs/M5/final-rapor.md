@@ -12,7 +12,7 @@
 
 Tip 2 diyabet ve hipertansiyon gibi belirtisi az, sonuçları ağır kronik hastalıklarda tedavi başarısının en büyük engeli ilaç uyumsuzluğudur. Bu çalışmada hastanın ilaç planını, doz kayıtlarını ve kan şekeri/tansiyon ölçümlerini girdiği; LLM tabanlı bir koçun bu veriye dayanarak **tıbbi tavsiye vermeden** motivasyonel ve kaynaklı geri bildirim ürettiği; hekimin atanmış hastalarının uyum skorunu, ölçüm eğrilerini ve risk bayraklarını tek ekranda gördüğü bir platform geliştirilmiştir. Sistem Next.js PWA, FastAPI, PostgreSQL + pgvector, Claude API (tool use + structured output) ve Web Push (VAPID) üzerine kuruludur.
 
-Güvenlik LLM'e bırakılmamıştır: koç mesajları LLM'den önce deterministik bir girdi filtresinden (acil belirti → sabit 112 yanıtı + hekime kritik uyarı; doz sorusu → sabit ret) ve LLM'den sonra bir çıktı doğrulayıcıdan (doz, teşhis, sağlık profesyoneli kimliği) geçer. Modelin gösterdiği kaynaklar sunucu tarafında, o turda gerçekten getirilmiş eğitim içerikleriyle eşleştirilir. Uyum skoru deterministik olarak hesaplanır ve model tarafından yalnızca okunur. Red-team guardrail seti 232 senaryodan oluşur ve CI'da her push'ta koşar; 395 backend testi, frontend lint/tip denetimi/derleme ve Docker imaj derlemesi CI hattında zorunludur.
+Güvenlik LLM'e bırakılmamıştır: koç mesajları LLM'den önce deterministik bir girdi filtresinden (acil belirti → sabit 112 yanıtı + hekime kritik uyarı; doz sorusu → sabit ret) ve LLM'den sonra bir çıktı doğrulayıcıdan (doz, teşhis, sağlık profesyoneli kimliği) geçer. Modelin gösterdiği kaynaklar sunucu tarafında, o turda gerçekten getirilmiş eğitim içerikleriyle eşleştirilir. Uyum skoru deterministik olarak hesaplanır ve model tarafından yalnızca okunur. Red-team guardrail seti 232 senaryodan oluşur ve CI'da her push'ta koşar; 469 backend testi, frontend lint/tip denetimi/derleme ve Docker imaj derlemesi CI hattında zorunludur.
 
 **Anahtar kelimeler:** ilaç uyumu, LLM güvenliği, guardrail, retrieval-augmented generation, rol bazlı erişim, KVKK, dijital sağlık
 
@@ -310,7 +310,7 @@ Dashboard tanı veya tedavi önerisi üretmez; bir **karar destek** değil **bil
 | Frontend | ESLint, `tsc --noEmit`, `next build` | Statik denetim ve derleme |
 | Dağıtım | Docker build | API ve web imajları |
 
-Toplam backend test sayısı: **395** (M3 sonunda 102; parametrik senaryolar dahil). `ruff` temiz; frontend `tsc`, `eslint` ve `next build` geçer. Testler gerçek LLM'e istek atmaz; CI deterministik ve ücretsizdir. CI sırası: ruff → guardrail seti → tüm testler → PostgreSQL migration upgrade/downgrade/upgrade + seed → frontend lint/tsc/build → iki Docker imajının derlenmesi.
+Toplam backend test sayısı: **469** (M3 sonunda 102; parametrik senaryolar dahil). `ruff` temiz; frontend `tsc`, `eslint` ve `next build` geçer. Testler gerçek LLM'e istek atmaz; CI deterministik ve ücretsizdir. CI sırası: ruff → guardrail seti → tüm testler → PostgreSQL migration upgrade/downgrade/upgrade + seed → frontend lint/tsc/build → iki Docker imajının derlenmesi.
 
 GitHub Actions hattı (`.github/workflows/ci.yml`): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL migration döngüsü → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi de geçerse **docker** işi iki imajı derler.
 

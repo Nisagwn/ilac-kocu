@@ -4,6 +4,7 @@
 import type {
   Adherence,
   Alert,
+  CoachJob,
   CoachMessage,
   CoachReply,
   DoseLog,
@@ -91,6 +92,8 @@ export const api = {
   ackAlert: (alertId: number) => request<Alert>(`/alerts/${alertId}/ack`, { method: "POST" }),
 
   chat: (message: string) => request<CoachReply>("/coach/chat", { method: "POST", body: json({ message }) }),
+  createCoachJob: (message: string) => request<CoachJob>("/coach/jobs", { method: "POST", body: json({ message }) }),
+  coachJob: (jobId: string) => request<CoachJob>(`/coach/jobs/${encodeURIComponent(jobId)}`),
   chatHistory: (limit = 50) => request<CoachMessage[]>(`/coach/history?limit=${limit}`),
 
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),

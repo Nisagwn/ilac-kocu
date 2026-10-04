@@ -144,6 +144,16 @@ export interface CoachReply {
   guardrail_action: string | null;
 }
 
+export type CoachJobStatus = "queued" | "running" | "done" | "failed";
+
+// POST /coach/jobs (200: girdi guardrail'i anında yanıtladı, job_id null; 202: kuyrukta) ve GET /coach/jobs/{id}
+export interface CoachJob {
+  job_id: string | null;
+  status: CoachJobStatus;
+  reply: CoachReply | null;
+  error: string | null;
+}
+
 export interface CoachMessage {
   id: number;
   sender: "patient" | "coach";

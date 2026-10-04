@@ -6,8 +6,8 @@ import { EmergencyBanner } from "@/components/app-shell";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent } from "@/components/ui/card";
 import { Textarea } from "@/components/ui/textarea";
-import { api } from "@/lib/api";
-import type { CoachMessage } from "@/lib/types";
+import { ApiError, api } from "@/lib/api";
+import type { CoachMessage, CoachReply } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { ErrorState, LoadingState } from "./states";
 import { useAsync } from "./use-async";
@@ -19,23 +19,161 @@ const SUGGESTIONS = [
   "Açlık şekerim neden yüksek olabilir?",
 ];
 
+// Koç yanıtı kuyrukta üretilir (POST /coach/jobs -> 202); sonuç GET /coach/jobs/{id} ile yoklanır.
+const POLL_INTERVAL_MS = 2000;
+const POLL_TIMEOUT_MS = 5 * 60 * 1000;
+const MAX_POLL_FAILURES = 5;
+const PENDING_KEY = "coach:pendingJob";
+
+interface PendingJob {
+  id: string;
+  startedAt: number;
+  /** Sayfa yeniden yüklendikten sonra devam ediliyorsa yanıt geçmişten yeniden okunur (çift balon olmaz). */
+  resumed: boolean;
+  /** Başarısız işte yeniden göndermek için (yalnızca bellekte; sessionStorage'a yazılmaz). */
+  message?: string;
+}
+
+interface JobError {
+  message: string;
+  retry: () => void;
+}
+
+// Yalnızca iş kimliği ve başlangıç zamanı saklanır, mesaj içeriği saklanmaz.
+function savePendingJob(job: PendingJob | null) {
+  try {
+    if (job) sessionStorage.setItem(PENDING_KEY, JSON.stringify({ id: job.id, startedAt: job.startedAt }));
+    else sessionStorage.removeItem(PENDING_KEY);
+  } catch {
+    // Depolama kapalıysa (gizli pencere vb.) yeniden yüklemede devam edilemez; sorun değil
+  }
+}
+
+function loadPendingJob(): PendingJob | null {
+  try {
+    const raw = sessionStorage.getItem(PENDING_KEY);
+    if (!raw) return null;
+    const parsed = JSON.parse(raw) as { id?: unknown; startedAt?: unknown };
+    if (typeof parsed.id !== "string" || typeof parsed.startedAt !== "number") return null;
+    return { id: parsed.id, startedAt: parsed.startedAt, resumed: true };
+  } catch {
+    return null;
+  }
+}
+
 export function CoachScreen() {
   const history = useAsync(useCallback(() => api.chatHistory(50), []));
-  const { data: messages, setData: setMessages } = history;
+  const { data: messages, setData: setMessages, reload: reloadHistory } = history;
   const [text, setText] = useState("");
   const [pending, setPending] = useState(false);
+  const [job, setJob] = useState<PendingJob | null>(null);
+  const [jobError, setJobError] = useState<JobError | null>(null);
   const [error, setError] = useState<string | null>(null);
   const bottomRef = useRef<HTMLDivElement>(null);
   const tempId = useRef(-1);
+  const busy = pending || job !== null;
 
   useEffect(() => {
     bottomRef.current?.scrollIntoView({ behavior: "smooth", block: "end" });
-  }, [messages, pending]);
+  }, [messages, pending, job]);
+
+  // Sayfa yeniden yüklendiyse bekleyen işi yoklamaya devam et
+  useEffect(() => {
+    const saved = loadPendingJob();
+    if (saved) setJob(saved);
+  }, []);
+
+  const appendReply = useCallback(
+    (reply: CoachReply) => {
+      const coach: CoachMessage = {
+        id: tempId.current--,
+        sender: "coach",
+        content: reply.message,
+        risk_level: reply.risk_level,
+        escalate_to_clinician: reply.escalate_to_clinician,
+        sources: reply.sources,
+        created_at: new Date().toISOString(),
+      };
+      setMessages((list) => [...(list ?? []), coach]);
+    },
+    [setMessages],
+  );
+
+  const startJob = useCallback((next: PendingJob) => {
+    setJobError(null);
+    savePendingJob(next);
+    setJob(next);
+  }, []);
+
+  const stopJob = useCallback(() => {
+    savePendingJob(null);
+    setJob(null);
+  }, []);
+
+  // Bekleyen işi 2 sn'de bir yokla; en fazla ~5 dk
+  useEffect(() => {
+    if (!job) return;
+    let cancelled = false;
+    let failures = 0;
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    const retryPolling = () => startJob({ ...job, startedAt: Date.now() });
+
+    const tick = async () => {
+      if (Date.now() - job.startedAt > POLL_TIMEOUT_MS) {
+        stopJob();
+        setJobError({ message: "Koç yanıtı beklenenden uzun sürdü.", retry: retryPolling });
+        return;
+      }
+      try {
+        const res = await api.coachJob(job.id);
+        if (cancelled) return;
+        failures = 0;
+        if (res.status === "done" && res.reply) {
+          stopJob();
+          if (job.resumed) reloadHistory();
+          else appendReply(res.reply);
+          return;
+        }
+        if (res.status === "failed") {
+          stopJob();
+          const original = job.message;
+          setJobError({
+            message: res.error ?? "Koç yanıtı üretilemedi.",
+            retry: () => {
+              setJobError(null);
+              if (original) setText(original);
+            },
+          });
+          return;
+        }
+      } catch (e) {
+        if (cancelled) return;
+        if (e instanceof ApiError && e.status === 404) {
+          stopJob();
+          reloadHistory();
+          return;
+        }
+        if (++failures >= MAX_POLL_FAILURES) {
+          stopJob();
+          setJobError({ message: errorMessage(e, "Koç yanıtı alınamadı"), retry: retryPolling });
+          return;
+        }
+      }
+      timer = setTimeout(() => void tick(), POLL_INTERVAL_MS);
+    };
+
+    timer = setTimeout(() => void tick(), POLL_INTERVAL_MS);
+    return () => {
+      cancelled = true;
+      clearTimeout(timer);
+    };
+  }, [job, appendReply, reloadHistory, startJob, stopJob]);
 
   async function send(raw: string) {
     const message = raw.trim();
-    if (!message || pending) return;
+    if (!message || busy) return;
     setError(null);
+    setJobError(null);
     setPending(true);
     const now = new Date().toISOString();
     const mine: CoachMessage = {
@@ -50,17 +188,15 @@ export function CoachScreen() {
     setMessages((list) => [...(list ?? []), mine]);
     setText("");
     try {
-      const reply = await api.chat(message);
-      const coach: CoachMessage = {
-        id: tempId.current--,
-        sender: "coach",
-        content: reply.message,
-        risk_level: reply.risk_level,
-        escalate_to_clinician: reply.escalate_to_clinician,
-        sources: reply.sources,
-        created_at: new Date().toISOString(),
-      };
-      setMessages((list) => [...(list ?? []), coach]);
+      const res = await api.createCoachJob(message);
+      if (res.status === "done" && res.reply) {
+        // Acil belirti / doz sorusu: girdi guardrail'i kuyruğa girmeden anında yanıtladı
+        appendReply(res.reply);
+      } else if (res.job_id) {
+        startJob({ id: res.job_id, startedAt: Date.now(), resumed: false, message });
+      } else {
+        throw new Error("Beklenmeyen yanıt");
+      }
     } catch (e) {
       setMessages((list) => list?.filter((m) => m.id !== mine.id) ?? list);
       setText(message);
@@ -89,7 +225,7 @@ export function CoachScreen() {
               </p>
               <div className="flex flex-wrap gap-2">
                 {SUGGESTIONS.map((s) => (
-                  <Button key={s} variant="outline" size="sm" className="h-auto whitespace-normal py-1.5 text-left" onClick={() => void send(s)} disabled={pending}>
+                  <Button key={s} variant="outline" size="sm" className="h-auto whitespace-normal py-1.5 text-left" onClick={() => void send(s)} disabled={busy}>
                     {s}
                   </Button>
                 ))}
@@ -100,13 +236,25 @@ export function CoachScreen() {
         {messages?.map((m) => <ChatBubble key={m.id} message={m} />)}
         {pending && (
           <div role="status" className="flex items-center gap-2 text-sm text-muted-foreground">
-            <Loader2 className="size-4 animate-spin" aria-hidden /> Koç yazıyor…
+            <Loader2 className="size-4 animate-spin" aria-hidden /> Gönderiliyor…
+          </div>
+        )}
+        {job && messages && (
+          <div className="flex justify-start">
+            <div
+              role="status"
+              className="flex max-w-[90%] items-start gap-2 rounded-2xl rounded-bl-sm bg-background px-3 py-2 text-sm text-muted-foreground ring-1 ring-foreground/10"
+            >
+              <Loader2 className="mt-0.5 size-4 shrink-0 animate-spin" aria-hidden />
+              <span>Koç yanıtını hazırlıyor… büyük modellerle bu 1–2 dakika sürebilir.</span>
+            </div>
           </div>
         )}
         <div ref={bottomRef} />
       </section>
 
       {error && <ErrorState message={error} />}
+      {jobError && <ErrorState message={jobError.message} onRetry={jobError.retry} />}
 
       <form
         className="sticky bottom-20 flex items-end gap-2 rounded-xl border bg-background p-2 shadow-sm md:bottom-4"
@@ -133,7 +281,7 @@ export function CoachScreen() {
             }
           }}
         />
-        <Button type="submit" size="icon-lg" aria-label="Gönder" disabled={pending || !text.trim()}>
+        <Button type="submit" size="icon-lg" aria-label="Gönder" disabled={busy || !text.trim()}>
           {pending ? <Loader2 className="animate-spin" /> : <SendHorizontal />}
         </Button>
       </form>

@@ -339,3 +339,68 @@ Oturum çerezi üretim derlemesinde (`docker compose`, `npm run build && npm sta
 | Koç her zaman aynı kalıp yanıtı veriyor | `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY` boş, günlük limit doldu veya API hatası → kural tabanlı yedek mod (beklenen davranış) |
 | openFDA kartı "bulunamadı" | Ticari isim eşleme tablosunda yoksa etken madde adıyla (ör. `metformin`) deneyin |
 | Değişiklikler görünmüyor (PWA) | Service worker eski kabuğu tutuyor olabilir: DevTools → Application → Service Workers → Unregister, sayfayı yenileyin |
+
+---
+
+## D2. Worker'ı Docker olmadan çalıştırma
+
+- Redis varsa: `REDIS_URL=redis://localhost:6379/0` ayarlayın; bir terminalde `uvicorn app.main:app --reload`, diğerinde `python -m app.worker` (ikisi de `backend/` içinde).
+- Redis yoksa: yalnızca uvicorn yeterli; koç işleri API sürecinde arka plan görevi olarak işlenir. Doz hatırlatmaları için `RUN_SCHEDULER_IN_API=true`.
+- Migration'lar artık API açılışında çalışmaz; Docker'sız ortamda `alembic upgrade head` komutunu kendiniz çalıştırın.
+- Zamanlayıcıyı yalnızca bir süreç çalıştırmalı; birden fazla worker başlatırsanız fazlalarında `REMINDERS_ENABLED=false` yapın.
+
+## E. Gözlemlenebilirlik
+
+API her isteğe bir **istek kimliği** atar: istemci `X-Request-ID` gönderirse (en fazla 128 karakter, harf/rakam/`.`/`_`/`-`) o kullanılır, yoksa üretilir; yanıtta `X-Request-ID` başlığıyla döner. Her istek için `app.access` adlı logger'a tek satır JSON yazılır:
+
+```json
+{"event": "http_request", "request_id": "3f2c...", "method": "GET", "route": "/patients/{patient_id}", "status": 200, "duration_ms": 12.4}
+```
+
+`route` ham yol değil **rota şablonudur**; sorgu değerleri, gövdeler ve kimlikler loglanmaz.
+
+**Prometheus:** `GET /metrics` (OpenAPI'de görünmez). Ayarlar:
+
+| Değişken | Varsayılan | Açıklama |
+|---|---|---|
+| `METRICS_ENABLED` | `true` | `false` ise `/metrics` 404 döner |
+| `METRICS_TOKEN` | boş | Tanımlıysa `Authorization: Bearer <token>` zorunlu (üretimde önerilir) |
+
+| Metrik | Etiketler | Anlamı |
+|---|---|---|
+| `http_requests_total`, `http_request_duration_seconds` | method, route, status | İstek sayısı / süresi (eşleşmeyen yollar `route="unmatched"`) |
+| `llm_request_duration_seconds` | purpose (coach/summary), model, outcome (ok/fallback/budget_exceeded/error) | LLM isteği süresi; `outcome="fallback"` oranı kural tabanlı koça düşme oranıdır |
+| `llm_tokens_total` | purpose, model, kind (input/output/cache_read/cache_write) | Token kullanımı |
+| `llm_cost_usd_total` | purpose, model | Maliyet (USD) |
+| `llm_rate_limited_total` | — | OpenRouter'dan alınan 429 yanıtları (yeniden denemeler dahil) |
+| `coach_guardrail_actions_total` | action | Kaydedilen koç yanıtlarındaki guardrail eylemi (`none`, `llm_fallback`, `budget_exceeded`...) |
+
+Hiçbir etikette hasta/kullanıcı kimliği yoktur. Çoklu worker (`uvicorn --workers N`) ile her süreç kendi sayaçlarını tutar; birleşik görünüm için `PROMETHEUS_MULTIPROC_DIR` (prometheus-client çoklu süreç modu) ya da tek worker kullanın.
+
+Örnek sorgular: fallback oranı `sum(rate(llm_request_duration_seconds_count{outcome="fallback"}[5m])) / sum(rate(llm_request_duration_seconds_count[5m]))`, p95 LLM gecikmesi `histogram_quantile(0.95, sum by (le) (rate(llm_request_duration_seconds_bucket[5m])))`.
+
+**Paylaşımlı önbellek:** `REDIS_URL` tanımlıysa hekim özet anlatısı (`narr:<hasta>:<gün>:<dönem>:<parmak izi>`, 24 saat) ve openFDA etiket önbelleği (`openfda:label:<etken madde>`) tüm worker'lar arasında Redis'te paylaşılır; Redis yoksa süreç içi önbelleğe düşülür.
+
+## F. Anlamsal embedding (isteğe bağlı)
+
+Varsayılan `EMBEDDING_PROVIDER=local` çevrimdışı, deterministik bir hashing embedding'idir (sözcüksel; anlamsal değildir). Eşanlamlı ve farklı ifadeli soruları daha iyi eşleştirmek için yerel, çok dilli bir model kullanılabilir:
+
+```bash
+pip install -r requirements.txt -r requirements-ml.txt   # fastembed (ONNX, CPU; ~120 MB model ilk kullanımda indirilir)
+```
+
+`.env`:
+
+```
+EMBEDDING_PROVIDER=fastembed
+# FASTEMBED_MODEL=intfloat/multilingual-e5-small   (varsayılan; 384 boyut — mevcut vector(384) sütunu, migration gerekmez)
+# FASTEMBED_CACHE_DIR=/data/fastembed               (model dosyalarının kalıcı dizini)
+```
+
+Ardından içerikleri yeni modelle yeniden embed edin (her satır `embedding_model` alanını tuttuğu için sağlayıcı değişince eski vektörler zaten geçersiz sayılır; komut bunu önceden yapar):
+
+```bash
+python -m app.services.rag.reindex --all
+```
+
+e5 modelleri için sorgular `query: `, içerikler `passage: ` önekiyle otomatik embed edilir. `fastembed` yüklü değilse ya da model indirilemezse API çökmez: uyarı loglanır ve yerel embedding kullanılır.

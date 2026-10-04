@@ -2,8 +2,9 @@
 
 - LLM varsa ve bütçe uygunsa: deterministik istatistiklerden kısa, olgusal Türkçe anlatı (teşhis/tedavi önerisi yok).
 - Aksi halde (veya hata/guardrail engeli): deterministik şablon anlatı.
-- Önbellek: süreç içi, (hasta, yerel gün, dönem, veri parmak izi) anahtarıyla; aynı gün aynı veri için
-  ikinci kez ücret ödenmez. Ayrıca hasta başına günlük LLM özet sayısı sınırlıdır (llm_daily_summary_requests).
+- Önbellek: (hasta, yerel gün, dönem, veri parmak izi) anahtarıyla; aynı gün aynı veri için ikinci kez ücret
+  ödenmez. Redis varsa paylaşımlı (tüm worker'lar; "narr:<hasta>:<gün>:<dönem>:<parmak izi>", 24 saat TTL, JSON),
+  yoksa süreç içi. Ayrıca hasta başına günlük LLM özet sayısı sınırlıdır (llm_daily_summary_requests).
 """
 
 import hashlib
@@ -17,6 +18,8 @@ from zoneinfo import ZoneInfo
 from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
+from app.observability import observe_llm
+from app.redis_client import get_redis
 from app.services import guardrails as gr
 from app.services.llm.budget import UsageTotals, check_budget, record_usage
 from app.services.llm.client import LlmError, create_message, get_client, text_of
@@ -41,6 +44,9 @@ belirli bir gün diliminde yoğunlaşan kaçırılan dozlar (ör. akşam dozlar�
 
 _UNIT_RX = re.compile(r"mg\s*/\s*dl", re.IGNORECASE)
 
+CACHE_PREFIX = "narr:"
+CACHE_TTL_SECONDS = 24 * 3600
+
 _cache: dict[tuple, tuple[str, str]] = {}
 _lock = threading.Lock()
 
@@ -48,6 +54,48 @@ _lock = threading.Lock()
 def clear_cache() -> None:
     with _lock:
         _cache.clear()
+    r = get_redis()
+    if r is not None:
+        try:
+            for k in r.scan_iter(CACHE_PREFIX + "*"):
+                r.delete(k)
+        except Exception:
+            logger.warning("Redis anlatı önbelleği temizlenemedi", exc_info=True)
+
+
+def _redis_key(key: tuple) -> str:
+    patient_id, day, period, fingerprint = key
+    return f"{CACHE_PREFIX}{patient_id}:{day.isoformat()}:{period}:{fingerprint}"
+
+
+def _cache_get(key: tuple) -> tuple[str | None, str | None] | None:
+    r = get_redis()
+    if r is not None:
+        try:
+            raw = r.get(_redis_key(key))
+            if raw:
+                narrative_text, source = json.loads(raw)
+                return narrative_text, source
+            return None
+        except Exception:  # önbellek hatası isteği asla bozmaz
+            logger.warning("Redis anlatı önbelleği okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+    with _lock:
+        return _cache.get(key)
+
+
+def _cache_set(key: tuple, value: tuple[str | None, str | None]) -> None:
+    r = get_redis()
+    if r is not None:
+        try:
+            r.setex(_redis_key(key), CACHE_TTL_SECONDS, json.dumps(list(value), ensure_ascii=False))
+            return
+        except Exception:
+            logger.warning("Redis anlatı önbelleğine yazılamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+    with _lock:
+        # yalnızca bugünün kayıtlarını tut (bellek sınırlı kalsın)
+        for k in [k for k in _cache if k[1] != key[1]]:
+            del _cache[k]
+        _cache[key] = value
 
 
 def _fmt(v: float | None) -> str:
@@ -145,24 +193,23 @@ def generate_narrative(db: Session, patient_id: int, facts: dict, client=None,
         return None, None
     now = now or datetime.now(UTC)
     key = (patient_id, now.astimezone(ZoneInfo(s.timezone)).date(), facts["period_days"], _fingerprint(facts))
-    with _lock:
-        if key in _cache:
-            return _cache[key]
+    cached = _cache_get(key)
+    if cached is not None:
+        return cached
 
     result: tuple[str | None, str | None] = (template_narrative(facts), "template")
     if s.llm_enabled or client is not None:
-        decision = check_budget(db, patient_id, PURPOSE, s, now)
-        if decision.allowed:
-            try:
-                result = (_llm_narrative(db, patient_id, facts, client, s), "llm")
-            except Exception as exc:
-                logger.warning("LLM özet anlatısı başarısız (%s), şablon kullanılıyor", type(exc).__name__)
-        else:
-            logger.info("Özet anlatısı için LLM bütçesi uygun değil (%s)", decision.reason)
+        with observe_llm(PURPOSE, s.model_name) as obs:
+            decision = check_budget(db, patient_id, PURPOSE, s, now)
+            if decision.allowed:
+                try:
+                    result = (_llm_narrative(db, patient_id, facts, client, s), "llm")
+                except Exception as exc:
+                    obs.outcome = "fallback"
+                    logger.warning("LLM özet anlatısı başarısız (%s), şablon kullanılıyor", type(exc).__name__)
+            else:
+                obs.outcome = "budget_exceeded"
+                logger.info("Özet anlatısı için LLM bütçesi uygun değil (%s)", decision.reason)
 
-    with _lock:
-        # yalnızca bugünün kayıtlarını tut (bellek sınırlı kalsın)
-        for k in [k for k in _cache if k[1] != key[1]]:
-            del _cache[k]
-        _cache[key] = result
+    _cache_set(key, result)
     return result

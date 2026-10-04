@@ -21,6 +21,7 @@ from sqlalchemy.orm import Session
 
 from app.config import Settings, get_settings
 from app.models import CoachMessage, Patient, RiskLevel, Sender
+from app.observability import observe_llm
 from app.services.coach import WHO_SOURCE, CoachReply, RuleBasedCoach, Source
 from app.services.llm import patient_data
 from app.services.llm.budget import UsageTotals, check_budget, record_usage
@@ -252,27 +253,36 @@ class ClaudeCoachProvider:
         return self._client
 
     def reply(self, db: Session, patient: Patient, message: str) -> CoachReply:
-        decision = check_budget(db, patient.id, PURPOSE, self.settings)
-        if not decision.allowed:
-            logger.info("LLM bütçesi aşıldı (%s), kural tabanlı koça düşülüyor", decision.reason)
-            base = self.fallback.reply(db, patient, message)
-            return base.model_copy(update={"message": base.message + BUDGET_NOTE, "guardrail_action": "budget_exceeded"})
+        with observe_llm(PURPOSE, self.settings.model_name) as obs:
+            decision = check_budget(db, patient.id, PURPOSE, self.settings)
+            if not decision.allowed:
+                logger.info("LLM bütçesi aşıldı (%s), kural tabanlı koça düşülüyor", decision.reason)
+                obs.outcome = "budget_exceeded"
+                base = self.fallback.reply(db, patient, message)
+                return base.model_copy(update={"message": base.message + BUDGET_NOTE,
+                                               "guardrail_action": "budget_exceeded"})
 
-        totals = UsageTotals(model=self.settings.model_name)
-        try:
-            return self._run(db, patient, message, totals)
-        except Exception as exc:
-            logger.warning("LLM koç başarısız (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
-            base = self.fallback.reply(db, patient, message)
-            return base.model_copy(update={"guardrail_action": "llm_fallback"})
-        finally:
-            record_usage(db, patient.id, PURPOSE, totals)
+            totals = UsageTotals(model=self.settings.model_name)
+            try:
+                return self._run(db, patient, message, totals)
+            except Exception as exc:
+                logger.warning("LLM koç başarısız (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
+                obs.outcome = "fallback"
+                base = self.fallback.reply(db, patient, message)
+                return base.model_copy(update={"guardrail_action": "llm_fallback"})
+            finally:
+                obs.model = totals.model
+                record_usage(db, patient.id, PURPOSE, totals)
 
     def _run(self, db: Session, patient: Patient, message: str, totals: UsageTotals) -> CoachReply:
         s = self.settings
         now = datetime.now(UTC)
         toolbox = CoachToolbox(db, patient.id, now)
         messages: list[dict] = _history(db, patient.id, s.llm_history_messages)
+        # İş (job) yolunda hasta mesajı sağlayıcıdan ÖNCE kaydedilir: geçmişin son satırı bu mesajsa
+        # tekrar gönderilmez (model kullanıcı turunu iki kez görmesin, token israfı olmasın)
+        if messages and messages[-1]["role"] == "user" and messages[-1]["content"] == message[:1000]:
+            messages.pop()
         messages.append({"role": "user", "content": [
             {"type": "text", "text": _context_block(patient, now, s.timezone)},
             {"type": "text", "text": message},

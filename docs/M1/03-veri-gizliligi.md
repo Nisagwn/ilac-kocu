@@ -62,7 +62,7 @@ flowchart LR
 
 ## 4. Teknik önlemler
 
-- Şifreler bcrypt ile hash'lenir; JWT kısa ömürlü (60 dk).
+- Şifreler bcrypt ile hash'lenir; JWT kısa ömürlü (15 dk; yenileme token rotasyonu ve çıkışta iptal — bkz. §6).
 - Tüm trafik HTTPS (production); gizli anahtarlar `.env` / ortam değişkeni, repoda yok.
 - Veritabanı yedekleri şifreli; demo ortamında yalnızca sentetik veri kullanılır.
 - Guardrail olayları (engellenen yanıtlar) mesaj içeriği olmadan loglanır.
@@ -70,3 +70,20 @@ flowchart LR
 ## 5. Sınırlılık
 
 Bu bir ders projesidir; gerçek hasta verisiyle kullanılmadan önce VERBİS kaydı, hukuki inceleme ve sağlık bakanlığı mevzuatına uygunluk değerlendirmesi gerekir. Demo yalnızca sentetik verilerle yapılır.
+
+## 6. Uygulanan iyileştirmeler
+
+**Oturum güvenliği**
+- Erişim JWT'si artık **15 dk** ömürlüdür (`JWT_EXPIRE_MINUTES`) ve benzersiz bir `jti` taşır. Oturum, opak bir **yenileme token'ı** (14 gün, `REFRESH_TOKEN_DAYS`) ile sürer; veritabanında (`refresh_tokens`) yalnızca SHA-256 özeti saklanır.
+- Yenileme token'ı her kullanımda **döndürülür** (eskisi iptal, yenisi verilir). İptal edilmiş bir token yeniden gelirse çalınma varsayılır ve kullanıcının **tüm** yenileme token'ları iptal edilir.
+- **Çıkış** (`POST /auth/logout`) yenileme token'ını iptal eder ve erişim token'ının `jti`'sini kalan ömrü kadar iptal listesine ekler (Redis `jwt:deny:<jti>`; Redis yoksa süreç içi liste). İptal listesindeki token her istekte reddedilir.
+- Tarayıcıda iki token da httpOnly çerezdedir; yenileme çerezi `SameSite=Strict` ve yalnızca `/api` yoluna (Next.js route handler'ları) gönderilir. Proxy, 401 aldığında oturumu bir kez sunucu tarafında yeniler ve isteği tekrarlar.
+
+**Giriş/kayıt istek sınırı**
+- Giriş: IP başına 5 deneme/dk ve e-posta başına 10 deneme/15 dk (başarılı ya da başarısız her deneme sayılır); kayıt: IP başına 5/saat. Aşımda `429` + `Retry-After`.
+- *Güven varsayımı:* IP, bağlantının karşı ucudur; `X-Forwarded-For` yalnızca `TRUSTED_PROXIES` (varsayılan `127.0.0.1`, `::1`) içindeki bir adresten (Next.js sunucusu) gelirse ve en sağdaki değeri kullanılarak dikkate alınır. Next.js giriş/proxy rotaları istemci IP'sini bu başlıkla iletir. Production'da Next.js'in önündeki ters proxy bu başlığı istemci değerinin üzerine yazmalı, API portu (8000) dışarıya açılmamalı ve Docker'da web konteynerinin ağı `TRUSTED_PROXIES`'e eklenmelidir. E-posta başına sınır IP'den bağımsızdır.
+
+**Erişim kaydı (KVKK hesap verebilirlik)**
+- Hekim veya bakım veren bir hastanın verisine eriştiğinde `access_logs` tablosuna bir satır yazılır: eriştiren kullanıcı, rolü, hasta, işlem (`read`/`write`), uç nokta yolu ve zaman. **Sağlık değeri yazılmaz.** Aynı istekte aynı hasta için tek satır oluşur; hastanın kendi erişimi kaydedilmez.
+- Hasta, `GET /patients/me/access-log?days=30` ile (Özet ekranındaki "Verilerime kimler baktı" kartı) son erişimleri görür. Hasta silinince kayıtları da silinir; eriştiren hesap silinirse kayıt anonim olarak kalır.
+- Sınırlılık: hekim panelindeki hasta listesi (`GET /patients`) ve toplu uyarı listesi tek tek hasta erişimi olarak kaydedilmez.

@@ -79,7 +79,7 @@ Durum: ✅ karşılandı · ⚠️ kısmen / bilinen sınırlılık · ⏳ bekli
 | Kontrol | Durum | Kanıt |
 |---|---|---|
 | Lint (ruff, ESLint) ve tip denetimi (tsc) | ✅ | `.github/workflows/ci.yml` |
-| Backend test sayısı | ✅ | 395 test geçer (M3: 102); `ruff` temiz; frontend `tsc`, `eslint`, `next build` geçer |
+| Backend test sayısı | ✅ | 469 test geçer (M3: 102); `ruff` temiz; frontend `tsc`, `eslint`, `next build` geçer |
 | Testler gerçek LLM'e istek atmaz (deterministik, ücretsiz CI) | ✅ | `backend/tests/conftest.py` (`ANTHROPIC_API_KEY` boşaltılır, `COACH_PROVIDER=rule`); `tests/test_coach_llm.py` sahte `FakeClient`; `tests/test_summary_llm.py` sahte anlatı istemcisi |
 | Migration upgrade → downgrade → upgrade (PostgreSQL) | ✅ | `ci.yml` "Migration (PostgreSQL)" adımı |
 | Docker imajları CI'da derlenir; root olmayan kullanıcı | ✅ | `ci.yml` `docker` işi; `backend/Dockerfile`, `frontend/Dockerfile` |

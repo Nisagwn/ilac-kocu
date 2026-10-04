@@ -11,6 +11,7 @@ from sqlalchemy import (
     Enum,
     Float,
     ForeignKey,
+    Index,
     Integer,
     String,
     Text,
@@ -259,3 +260,61 @@ class LlmUsage(Base):
     cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
     cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class CoachJob(Base):
+    """Asenkron koç işi (POST /coach/jobs). Kuyruk işçisi (app/worker.py) LLM yanıtını üretir.
+
+    status: queued -> running -> done | failed. Hasta mesajı koç sohbetine iş oluşturulurken kaydedilir;
+    `message` yalnızca işlenene kadar tutulur, iş bitince temizlenir (gizlilik).
+    """
+
+    __tablename__ = "coach_jobs"
+
+    id: Mapped[str] = mapped_column(String(36), primary_key=True)  # uuid4
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), index=True)
+    message: Mapped[str | None] = mapped_column(Text)
+    status: Mapped[str] = mapped_column(String(10), default="queued", index=True)
+    reply: Mapped[dict | None] = mapped_column(JSON)
+    error: Mapped[str | None] = mapped_column(String(200))
+    attempts: Mapped[int] = mapped_column(Integer, default=0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+
+
+class RefreshToken(Base):
+    """Yenileme token'ı. Token'ın kendisi tutulmaz, yalnızca SHA-256 özeti saklanır.
+
+    Her kullanımda döndürülür (eskisi iptal edilir, `replaced_by` yenisini gösterir). İptal edilmiş bir
+    token yeniden kullanılırsa çalınma varsayılır ve kullanıcının tüm yenileme token'ları iptal edilir.
+    """
+
+    __tablename__ = "refresh_tokens"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    token_hash: Mapped[str] = mapped_column(String(64), unique=True)
+    expires_at: Mapped[datetime] = mapped_column(DateTime(timezone=True))
+    revoked_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    replaced_by: Mapped[int | None] = mapped_column(Integer)  # döndürmede yerine geçen token'ın id'si
+
+
+class AccessLog(Base):
+    """KVKK hesap verebilirlik: hekim/bakım veren hasta verisine eriştiğinde bir satır.
+
+    Yalnızca üst veri tutulur (kim, hangi hasta, hangi uç nokta, ne zaman); sağlık değeri asla yazılmaz.
+    Hasta silinirse kayıtları da silinir; eriştiren hesap silinirse kayıt kalır (actor_user_id NULL olur).
+    """
+
+    __tablename__ = "access_logs"
+    __table_args__ = (Index("ix_access_logs_patient_created", "patient_id", "created_at"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    actor_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    actor_role: Mapped[str] = mapped_column(String(20))
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"))
+    action: Mapped[str] = mapped_column(String(20))  # read | write
+    path: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
