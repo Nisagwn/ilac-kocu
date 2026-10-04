@@ -26,6 +26,13 @@ PRICES: dict[str, ModelPrice] = {
     "claude-sonnet-5": ModelPrice(2.0, 10.0, 0.20),
     "claude-sonnet-4-6": ModelPrice(3.0, 15.0, 0.30),
     "claude-haiku-4-5": ModelPrice(1.0, 5.0, 0.10),
+    # OpenRouter kimlikleri (openrouter.ai/api/v1/models, 2026-10). OpenRouter yanıtta gerçek maliyeti de
+    # döndürür; tablo yalnızca maliyet bildirilmezse kullanılır.
+    "anthropic/claude-opus-5.5": ModelPrice(4.0, 20.0, 0.40),
+    "anthropic/claude-sonnet-5.5": ModelPrice(2.0, 10.0, 0.20),
+    "anthropic/claude-haiku-4.5": ModelPrice(1.0, 5.0, 0.10),
+    "openai/gpt-5.4-mini": ModelPrice(0.75, 4.5, 0.075),
+    "google/gemini-3.5-flash": ModelPrice(1.5, 9.0, 0.15),
 }
 FALLBACK_PRICE = ModelPrice(10.0, 50.0, 1.0)
 CACHE_WRITE_MULTIPLIER = 1.25

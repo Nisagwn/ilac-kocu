@@ -28,6 +28,8 @@ class UsageTotals:
     cache_read_tokens: int = 0
     cache_write_tokens: int = 0
     calls: int = 0
+    reported_cost: float = 0.0  # sağlayıcının bildirdiği gerçek maliyet (OpenRouter usage.cost)
+    unreported_calls: int = 0  # maliyet bildirilmeyen çağrılar: bunlar fiyat tablosundan hesaplanır
 
     def add(self, response) -> None:
         usage = getattr(response, "usage", None)
@@ -38,9 +40,17 @@ class UsageTotals:
         self.output_tokens += getattr(usage, "output_tokens", 0) or 0
         self.cache_read_tokens += getattr(usage, "cache_read_input_tokens", 0) or 0
         self.cache_write_tokens += getattr(usage, "cache_creation_input_tokens", 0) or 0
+        cost = getattr(usage, "cost", None)
+        if isinstance(cost, int | float):
+            self.reported_cost += float(cost)
+        else:
+            self.unreported_calls += 1
 
     @property
     def cost_usd(self) -> float:
+        # Tüm çağrılar maliyet bildirdiyse gerçek tutar; aksi halde fiyat tablosu (bilinmeyen model en pahalı)
+        if self.calls and self.unreported_calls == 0:
+            return round(self.reported_cost, 6)
         return cost_usd(self.model, self.input_tokens, self.output_tokens, self.cache_read_tokens,
                         self.cache_write_tokens)
 

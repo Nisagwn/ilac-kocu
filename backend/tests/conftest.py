@@ -5,6 +5,7 @@ os.environ.setdefault("JWT_SECRET", "test-secret-test-secret-test-secret-32b")
 os.environ.setdefault("REMINDERS_ENABLED", "false")  # arka plan zamanlayıcısı testlerde çalışmaz
 # Testler asla gerçek LLM'e gitmez: .env'de anahtar olsa bile kural tabanlı koç kullanılır
 os.environ["ANTHROPIC_API_KEY"] = ""
+os.environ["OPENROUTER_API_KEY"] = ""
 os.environ["COACH_PROVIDER"] = "rule"
 
 import pytest

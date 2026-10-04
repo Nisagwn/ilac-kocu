@@ -112,7 +112,7 @@ def _fingerprint(facts: dict) -> str:
 
 
 def _llm_narrative(db: Session, patient_id: int, facts: dict, client, settings: Settings) -> str:
-    totals = UsageTotals(model=settings.llm_model)
+    totals = UsageTotals(model=settings.model_name)
     try:
         resp = create_message(
             client or get_client(settings), settings,

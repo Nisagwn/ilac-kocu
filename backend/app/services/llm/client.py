@@ -1,4 +1,4 @@
-"""Anthropic istemcisi ve ortak çağrı yardımcıları.
+"""LLM istemcisi (Anthropic veya OpenRouter) ve ortak çağrı yardımcıları.
 
 İstemci tembel oluşturulur (oluşturma ağ çağrısı yapmaz); testler sahte istemci enjekte eder.
 """
@@ -23,19 +23,29 @@ def _cached_client(api_key: str, timeout: float, max_retries: int):
 
 
 def get_client(settings: Settings):
-    if not settings.anthropic_api_key:
-        raise LlmError("ANTHROPIC_API_KEY tanımlı değil")
-    return _cached_client(settings.anthropic_api_key, settings.llm_timeout_seconds, settings.llm_max_retries)
+    backend = settings.llm_backend
+    if backend == "openrouter":
+        from app.services.llm.openrouter import OpenRouterClient
+
+        return OpenRouterClient(settings)
+    if backend == "anthropic":
+        return _cached_client(settings.anthropic_api_key, settings.llm_timeout_seconds, settings.llm_max_retries)
+    raise LlmError("LLM anahtarı tanımlı değil (OPENROUTER_API_KEY veya ANTHROPIC_API_KEY)")
 
 
 def create_message(client, settings: Settings, **kwargs):
-    """messages.create; yapılandırmaya göre sunucu tarafı yedek model (fallbacks) ve effort ekler."""
+    """messages.create; Anthropic'te yapılandırmaya göre sunucu tarafı yedek model (fallbacks) ve effort ekler.
+    OpenRouter adaptörü Anthropic'e özgü alanları kendisi yok sayar."""
+    if settings.llm_backend == "openrouter":
+        kwargs.setdefault("model", settings.model_name)
+        kwargs.setdefault("max_tokens", settings.llm_max_tokens)
+        return client.messages.create(**kwargs)
     output_config = dict(kwargs.pop("output_config", None) or {})
     if settings.llm_effort:
         output_config.setdefault("effort", settings.llm_effort)
     if output_config:
         kwargs["output_config"] = output_config
-    kwargs.setdefault("model", settings.llm_model)
+    kwargs.setdefault("model", settings.model_name)
     kwargs.setdefault("max_tokens", settings.llm_max_tokens)
     if settings.llm_server_fallbacks:
         return client.beta.messages.create(betas=[SERVER_FALLBACK_BETA], fallbacks="default", **kwargs)

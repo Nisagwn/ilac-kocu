@@ -76,7 +76,7 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 ## Hızlı başlangıç
 
 ```bash
-cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve ANTHROPIC_API_KEY isteğe bağlı
+cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
 docker compose up --build                     # PostgreSQL + pgvector, Redis, API, web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
@@ -88,7 +88,7 @@ docker compose exec api python -m app.seed    # sentetik demo verisi
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
-`ANTHROPIC_API_KEY` boşsa koç kural tabanlı yedek modda çalışır (guardrail'ler aynen geçerlidir).
+LLM sağlayıcısı **OpenRouter** (önerilen model `anthropic/claude-sonnet-5.5`, bkz. [kurulum A5](docs/M5/kurulum.md)) ya da doğrudan Anthropic API olabilir; `OPENROUTER_API_KEY` ve `ANTHROPIC_API_KEY` boşsa koç kural tabanlı yedek modda çalışır (guardrail'ler aynen geçerlidir).
 Windows / macOS / Linux adım adım kurulum, Docker'sız geliştirme ve sorun giderme: **[`docs/M5/kurulum.md`](docs/M5/kurulum.md)**
 
 ## Mimari

@@ -12,7 +12,7 @@ Katman 1 (girdi guardrail) -> provider (kural tabanlı ya da Claude) -> Katman 3
 
 Kullanım (backend/ dizininde):
     python -m scripts.eval_coach                       # kural tabanlı provider, ağ erişimi YOK
-    python -m scripts.eval_coach --live                # ANTHROPIC_API_KEY varsa gerçek Claude
+    python -m scripts.eval_coach --live                # OPENROUTER_API_KEY / ANTHROPIC_API_KEY ile gerçek LLM
     python -m scripts.eval_coach --category doz_gizleme --format md --out-dir eval-out
 
 Rapor: <out-dir>/coach-eval-<zaman>.md ve .json (senaryo başına geçti/kaldı, gecikme,
@@ -133,8 +133,10 @@ def _build_provider(live: bool):
 
     if not live:
         return coach.RuleBasedCoach(), "rule-based"
-    if not os.environ.get("ANTHROPIC_API_KEY"):
-        raise SystemExit("--live için ANTHROPIC_API_KEY ortam değişkeni gerekli.")
+    from app.config import get_settings
+
+    if get_settings().llm_backend is None:
+        raise SystemExit("--live için OPENROUTER_API_KEY veya ANTHROPIC_API_KEY gerekli (ortam değişkeni ya da .env).")
     factory = getattr(coach, "get_coach_provider", None)
     if factory is not None:
         provider = factory()
@@ -346,7 +348,7 @@ def load_scenarios(path: Path, layer: str | None = None, category: str | None = 
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Koç hattını guardrail red-team seti üzerinde uçtan uca değerlendirir.")
-    ap.add_argument("--live", action="store_true", help="ANTHROPIC_API_KEY ile gerçek Claude provider'ını kullan")
+    ap.add_argument("--live", action="store_true", help="OPENROUTER_API_KEY veya ANTHROPIC_API_KEY ile gerçek LLM koçunu kullan")
     ap.add_argument("--scenarios", type=Path, default=DEFAULT_SCENARIOS)
     ap.add_argument("--layer", choices=["input", "output"])
     ap.add_argument("--category")

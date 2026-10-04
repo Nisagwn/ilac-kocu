@@ -32,11 +32,19 @@ class Settings(BaseSettings):
     vapid_subject: str = "mailto:admin@example.com"
     reminders_enabled: bool = True  # doz hatırlatma zamanlayıcısı (VAPID anahtarları da gerekir)
 
-    # --- M4: LLM koç (Claude) ---
+    # --- M4: LLM koç ---
+    # Sağlayıcı: "auto" (OPENROUTER_API_KEY varsa OpenRouter, yoksa ANTHROPIC_API_KEY varsa Anthropic),
+    # "openrouter" ya da "anthropic"
+    llm_provider: str = "auto"
     anthropic_api_key: str | None = None
-    # "auto": anahtar varsa Claude, yoksa kural tabanlı; "claude": aynı (anahtar şart); "rule": daima kural tabanlı
+    openrouter_api_key: str | None = None
+    openrouter_base_url: str = "https://openrouter.ai/api/v1"
+    # Sağlık verisi: yalnızca istemleri saklamayan/eğitimde kullanmayan sağlayıcılara yönlendir ("allow" ile kapatılır)
+    openrouter_data_collection: str = "deny"
+    # "auto": anahtar varsa LLM, yoksa kural tabanlı; "claude": aynı (anahtar şart); "rule": daima kural tabanlı
     coach_provider: str = "auto"
-    llm_model: str = "claude-opus-5-5"
+    # Boşsa sağlayıcıya göre varsayılan: Anthropic "claude-opus-5-5", OpenRouter "anthropic/claude-sonnet-5.5"
+    llm_model: str = ""
     llm_effort: str | None = "low"  # low|medium|high|xhigh|max; boş = model varsayılanı (Haiku 4.5'te boş bırakın)
     llm_max_tokens: int = 2048  # yanıt başına üst sınır (düşünme + metin)
     llm_max_tool_iterations: int = 4  # tool-use döngüsü en fazla bu kadar model çağrısı yapar
@@ -55,8 +63,28 @@ class Settings(BaseSettings):
         return bool(self.vapid_public_key and self.vapid_private_key)
 
     @property
+    def llm_backend(self) -> str | None:
+        """Kullanılacak LLM sağlayıcısı ("openrouter" | "anthropic") ya da anahtar yoksa None."""
+        p = self.llm_provider.lower()
+        if p == "openrouter":
+            return "openrouter" if self.openrouter_api_key else None
+        if p == "anthropic":
+            return "anthropic" if self.anthropic_api_key else None
+        if self.openrouter_api_key:
+            return "openrouter"
+        if self.anthropic_api_key:
+            return "anthropic"
+        return None
+
+    @property
+    def model_name(self) -> str:
+        if self.llm_model:
+            return self.llm_model
+        return "anthropic/claude-sonnet-5.5" if self.llm_backend == "openrouter" else "claude-opus-5-5"
+
+    @property
     def llm_enabled(self) -> bool:
-        return bool(self.anthropic_api_key) and self.coach_provider.lower() != "rule"
+        return self.llm_backend is not None and self.coach_provider.lower() != "rule"
 
 
 @lru_cache

@@ -89,12 +89,26 @@ Node yoksa Python alternatifi: `pip install py-vapid && vapid --gen && vapid --a
 
 ### A5. (İsteğe bağlı) LLM koç anahtarı
 
+Önerilen yol **OpenRouter** (tek anahtarla birçok model; https://openrouter.ai/keys):
+
 ```dotenv
-ANTHROPIC_API_KEY=sk-ant-...
+OPENROUTER_API_KEY=sk-or-...
+LLM_MODEL=anthropic/claude-sonnet-5.5     # boş bırakılırsa da bu kullanılır
+OPENROUTER_DATA_COLLECTION=deny           # yalnızca istemleri saklamayan/eğitimde kullanmayan sağlayıcılar
 ```
 
+| Model (OpenRouter kimliği) | Fiyat (USD / 1M token, girdi/çıktı) | Not |
+|---|---|---|
+| `anthropic/claude-sonnet-5.5` | 2 / 10 | **Önerilen**: Türkçe kalite, araç kullanımı ve güvenlik talimatlarına uyum |
+| `anthropic/claude-haiku-4.5` | 1 / 5 | Yarı maliyet; kısa koç yanıtları için yeterli olabilir |
+| `openai/gpt-5.4-mini` | 0.75 / 4.5 | Başka sağlayıcı; değiştirirseniz `python -m scripts.eval_coach --live` ile guardrail davranışını yeniden doğrulayın |
+
+Kabaca: bir koç isteği (en fazla 4 model çağrısı) ≈ 12 bin girdi + 1 bin çıktı token → Sonnet 5.5'te ≈ 3–4 sent. OpenRouter her yanıtta gerçek maliyeti döndürür ve bütçe (`llm_usage`) bu tutarla tutulur.
+
+Doğrudan Anthropic API kullanmak için `OPENROUTER_API_KEY` boş bırakılıp `ANTHROPIC_API_KEY=sk-ant-...` girilir (`LLM_PROVIDER=auto` ikisinden hangisi doluysa onu seçer; ikisi de doluysa OpenRouter).
+
 - Boş bırakılırsa koç **kural tabanlı yedek** moduna geçer: acil belirti → 112, doz sorusu reddi ve uyum verisine dayalı motivasyon mesajları yine çalışır; yalnızca serbest dilde LLM yanıtı ve LLM haftalık anlatısı olmaz.
-- Maliyet sınırları (`.env`): `LLM_DAILY_PATIENT_REQUESTS=30`, `LLM_DAILY_PATIENT_TOKENS=300000`, `LLM_DAILY_SUMMARY_REQUESTS=3`, `LLM_MONTHLY_BUDGET_USD=50`. Sayaçlar veritabanındaki `llm_usage` tablosundadır; limit aşılırsa koç kural tabanlı yanıt verir. Model `LLM_MODEL=claude-opus-5-5` (daha ucuz seçenek: `claude-sonnet-5-5`).
+- Maliyet sınırları (`.env`): `LLM_DAILY_PATIENT_REQUESTS=30`, `LLM_DAILY_PATIENT_TOKENS=300000`, `LLM_DAILY_SUMMARY_REQUESTS=3`, `LLM_MONTHLY_BUDGET_USD=50`. Sayaçlar veritabanındaki `llm_usage` tablosundadır; limit aşılırsa koç kural tabanlı yanıt verir. Model `LLM_MODEL` ile seçilir (yukarıdaki tablo).
 - İsteğe bağlı embedding sağlayıcısı: `EMBEDDING_PROVIDER=voyage` ve `VOYAGE_API_KEY=...` (model `voyage-3.5-lite`, 384 boyuta kırpılır) (varsayılan: çevrimdışı yerel embedding, anahtar gerekmez).
 - İsteğe bağlı `OPENFDA_API_KEY`: anahtarsız da çalışır, yalnızca günlük istek limiti düşüktür.
 
@@ -311,6 +325,6 @@ Oturum çerezi üretim derlemesinde (`docker compose`, `npm run build && npm sta
 | `api` konteyneri `connection refused` ile çıkıyor | `db` henüz hazır değil; compose healthcheck bekler, yine olursa `docker compose restart api` |
 | `extension "vector" does not exist` | Düz `postgres` imajı kullanılıyor; `pgvector/pgvector:pg16` imajını kullanın |
 | Seed sonrası hekim listesi boş | `hekim@demo.local` ile girildiğinden emin olun; başka bir hekim hesabı açtıysanız hasta o hekime atanmamıştır (404 politikası gereği görünmez) |
-| Koç her zaman aynı kalıp yanıtı veriyor | `ANTHROPIC_API_KEY` boş, günlük limit doldu veya API hatası → kural tabanlı yedek mod (beklenen davranış) |
+| Koç her zaman aynı kalıp yanıtı veriyor | `OPENROUTER_API_KEY`/`ANTHROPIC_API_KEY` boş, günlük limit doldu veya API hatası → kural tabanlı yedek mod (beklenen davranış) |
 | openFDA kartı "bulunamadı" | Ticari isim eşleme tablosunda yoksa etken madde adıyla (ör. `metformin`) deneyin |
 | Değişiklikler görünmüyor (PWA) | Service worker eski kabuğu tutuyor olabilir: DevTools → Application → Service Workers → Unregister, sayfayı yenileyin |

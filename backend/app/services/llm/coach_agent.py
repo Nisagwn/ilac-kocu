@@ -258,7 +258,7 @@ class ClaudeCoachProvider:
             base = self.fallback.reply(db, patient, message)
             return base.model_copy(update={"message": base.message + BUDGET_NOTE, "guardrail_action": "budget_exceeded"})
 
-        totals = UsageTotals(model=self.settings.llm_model)
+        totals = UsageTotals(model=self.settings.model_name)
         try:
             return self._run(db, patient, message, totals)
         except Exception as exc:
