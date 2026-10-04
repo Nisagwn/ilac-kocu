@@ -192,7 +192,7 @@ python3.12 -m venv .venv
 source .venv/bin/activate            # Git Bash'te: source .venv/Scripts/activate
 pip install -r requirements-dev.txt
 
-export DATABASE_URL=postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu
+export DATABASE_URL=postgresql+psycopg://ilac:ilac@localhost:5433/ilac_kocu
 export JWT_SECRET=$(python -c "import secrets; print(secrets.token_hex(32))")
 
 alembic upgrade head
@@ -208,7 +208,7 @@ py -3.12 -m venv .venv
 .\.venv\Scripts\Activate.ps1
 pip install -r requirements-dev.txt
 
-$env:DATABASE_URL = "postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu"
+$env:DATABASE_URL = "postgresql+psycopg://ilac:ilac@localhost:5433/ilac_kocu"
 $env:JWT_SECRET  = python -c "import secrets; print(secrets.token_hex(32))"
 
 alembic upgrade head
@@ -279,7 +279,7 @@ GitHub Actions (`.github/workflows/ci.yml`) her push ve PR'da aynı adımları k
 
 ### Port çakışması (`port is already allocated`, `address already in use`)
 
-5432 (PostgreSQL), 6379 (Redis), 8000 (API) veya 3000 (web) başka bir süreç tarafından kullanılıyor olabilir.
+5433 (PostgreSQL, yalnızca 127.0.0.1), 8000 (API) veya 3000 (web) başka bir süreç tarafından kullanılıyor olabilir.
 
 ```bash
 # macOS / Linux
