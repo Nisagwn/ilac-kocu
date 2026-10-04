@@ -1,4 +1,3 @@
-from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
@@ -14,6 +13,7 @@ from app.schemas import (
     PatientSummaryOut,
     PatientUpdate,
 )
+from app.services import summary as summary_service
 from app.services.adherence import adherence_band
 from app.services.coach import get_adherence
 
@@ -125,27 +125,6 @@ def remove_caregiver(caregiver_user_id: int, db: DB, user: Annotated[User, Depen
 
 @router.get("/{patient_id}/summary")
 def weekly_summary(patient_id: int, db: DB, user: CurrentUser):
-    """Haftalık özet (M2: deterministik istatistik; M4'te LLM ile anlatı özeti eklenecek)."""
+    """Haftalık özet. Geriye dönük uyumluluk için korunur; yeni istemciler `GET /summaries/{patient_id}` kullanır."""
     get_patient_for_read(db, user, patient_id)
-    since = datetime.now(UTC) - timedelta(days=7)
-    adh = get_adherence(db, patient_id, 7)
-    stats = db.execute(
-        select(Measurement.type, func.count(), func.avg(Measurement.value), func.min(Measurement.value),
-               func.max(Measurement.value), func.avg(Measurement.value2))
-        .where(Measurement.patient_id == patient_id, Measurement.measured_at >= since)
-        .group_by(Measurement.type)
-    ).all()
-    alerts = db.scalar(
-        select(func.count()).select_from(Alert).where(Alert.patient_id == patient_id, Alert.created_at >= since)
-    )
-    return {
-        "period_days": 7,
-        "adherence": {"score": adh.score, "planned": adh.planned, "taken": adh.taken, "band": adherence_band(adh.score)},
-        "measurements": [
-            {"type": t.value, "count": c, "avg": round(a, 1), "min": mn, "max": mx,
-             "avg_diastolic": round(a2, 1) if a2 else None}
-            for t, c, a, mn, mx, a2 in stats
-        ],
-        "alerts_last_7d": alerts or 0,
-        "narrative": None,
-    }
+    return summary_service.weekly_summary(db, patient_id)

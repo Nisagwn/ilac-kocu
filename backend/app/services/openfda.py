@@ -4,6 +4,10 @@ openFDA ABD etiketlerini döndürür; Türkiye'deki ticari isimler bulunmaz. Bu 
 TR ticari isim -> etken madde eşlemesi yapılır, sorgu etken madde (generic_name) üzerinden atılır.
 """
 
+import json
+import logging
+from typing import Any
+
 import httpx
 
 from app.config import get_settings
@@ -35,6 +39,9 @@ TR_BRAND_TO_GENERIC = {
 }
 
 MAX_FIELD_CHARS = 1200
+CACHE_TTL_SECONDS = 24 * 3600
+
+log = logging.getLogger(__name__)
 
 
 class DrugLabelNotFound(Exception):
@@ -105,3 +112,77 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
     if not results:
         raise DrugLabelNotFound(name)
     return parse_label(name, generic, results[0])
+
+
+# ---------------------------------------------------------------- önbellek
+class LabelCache:
+    """openFDA etiket önbelleği: REDIS_URL tanımlıysa Redis (24 saat TTL), değilse süreç içi sözlük.
+
+    Redis'e ulaşılamazsa sessizce süreç içi önbelleğe düşer; önbellek hatası isteği asla bozmaz."""
+
+    PREFIX = "openfda:label:"
+
+    def __init__(self) -> None:
+        self._memory: dict[str, dict] = {}
+        self._redis: Any = None
+        self._redis_checked = False
+
+    def _client(self):
+        if not self._redis_checked:
+            self._redis_checked = True
+            url = get_settings().redis_url
+            if url:
+                try:
+                    import redis
+
+                    self._redis = redis.Redis.from_url(url, socket_timeout=2, socket_connect_timeout=2)
+                except Exception:  # pragma: no cover - yapılandırma hatası
+                    log.warning("Redis istemcisi oluşturulamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+        return self._redis
+
+    def get(self, key: str) -> dict | None:
+        r = self._client()
+        if r is not None:
+            try:
+                raw = r.get(self.PREFIX + key)
+                return json.loads(raw) if raw else None
+            except Exception:
+                log.warning("Redis okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+        return self._memory.get(key)
+
+    def set(self, key: str, value: dict) -> None:
+        r = self._client()
+        if r is not None:
+            try:
+                r.setex(self.PREFIX + key, CACHE_TTL_SECONDS, json.dumps(value, ensure_ascii=False))
+                return
+            except Exception:
+                log.warning("Redis'e yazılamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+        self._memory[key] = value
+
+    def clear(self) -> None:
+        self._memory.clear()
+        r = self._client()
+        if r is not None:
+            try:
+                for k in r.scan_iter(self.PREFIX + "*"):
+                    r.delete(k)
+            except Exception:
+                log.warning("Redis önbelleği temizlenemedi", exc_info=True)
+
+    def __contains__(self, key: str) -> bool:
+        return self.get(key) is not None
+
+
+label_cache = LabelCache()
+
+
+def get_label_cached(name: str) -> dict:
+    """Önbellekli fetch_label. DrugLabelNotFound / OpenFDAUnavailable yukarı fırlatılır."""
+    key = resolve_generic(name)
+    cached = label_cache.get(key) if key else None
+    if cached is not None:
+        return cached
+    data = fetch_label(name)  # modül düzeyinde çözülür: testler monkeypatch edebilir
+    label_cache.set(key, data)
+    return data

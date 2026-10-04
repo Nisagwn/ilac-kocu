@@ -1,11 +1,14 @@
 """Koç servisi.
 
-Akış: Katman 1 (girdi guardrail) -> Provider (M2/M3: kural tabanlı prototip, M4: Claude tool-use)
+Akış: Katman 1 (girdi guardrail) -> Provider (Claude tool-use koç veya kural tabanlı koç)
       -> Katman 3 (çıktı guardrail) -> kayıt + gerekirse hekime alert.
 
-Provider arayüzü sabittir; M4'te ClaudeCoachProvider aynı CoachReply şemasını döndürecek.
+Provider seçimi get_coach_provider(): ANTHROPIC_API_KEY varsa ve COACH_PROVIDER != "rule" ise
+ClaudeCoachProvider (app/services/llm/coach_agent.py), aksi halde RuleBasedCoach. Her iki provider da
+aynı CoachReply şemasını döndürür; LLM hatasında/bütçe aşımında kural tabanlı koça düşülür.
 """
 
+import logging
 from datetime import UTC, datetime, timedelta
 from typing import Protocol
 from zoneinfo import ZoneInfo
@@ -29,6 +32,9 @@ from app.models import (
 )
 from app.services import guardrails as gr
 from app.services.adherence import AdherenceResult, LogSpec, ScheduleSpec, compute_adherence
+from app.services.rag import search_education
+
+logger = logging.getLogger(__name__)
 
 
 class Source(BaseModel):
@@ -90,9 +96,23 @@ WHO_SOURCE = Source(
 
 
 class RuleBasedCoach:
-    """Prototip koç: LLM kullanmadan, uyum verisine dayalı motivasyon mesajı üretir."""
+    """Prototip koç: LLM kullanmadan, uyum verisine dayalı motivasyon mesajı üretir.
+
+    Hastanın mesajıyla ilgili kürate eğitim içeriği varsa (RAG) en uygun maddeyi kaynak olarak ekler;
+    böylece LLM anahtarı olmadan da yanıtlar veriye dayalı ve kaynaklıdır.
+    """
 
     def reply(self, db: Session, patient: Patient, message: str) -> CoachReply:
+        reply = self._adherence_reply(db, patient)
+        hits = search_education(db, message, k=1)
+        if hits:
+            hit = hits[0]
+            first_sentence = hit.body.split(". ")[0].rstrip(".") + "."
+            reply.message += f" İlgili bilgi — {hit.title}: {first_sentence}"
+            reply.sources.insert(0, Source(title=f"{hit.title} ({hit.source_name})", url=hit.source_url))
+        return reply
+
+    def _adherence_reply(self, db: Session, patient: Patient) -> CoachReply:
         adh = get_adherence(db, patient.id, days=7)
         if adh.score is None:
             return CoachReply(
@@ -112,6 +132,15 @@ class RuleBasedCoach:
         )
         risk = RiskLevel.medium if adh.score < 0.6 else RiskLevel.low
         return CoachReply(message=text, risk_level=risk, escalate_to_clinician=adh.score < 0.5, sources=[WHO_SOURCE])
+
+
+def get_coach_provider() -> CoachProvider:
+    """FastAPI bağımlılığı: yapılandırmaya göre koç sağlayıcısı (testlerde override edilebilir)."""
+    if get_settings().llm_enabled:
+        from app.services.llm.coach_agent import ClaudeCoachProvider
+
+        return ClaudeCoachProvider()
+    return RuleBasedCoach()
 
 
 # --------- Orkestrasyon ---------
@@ -145,15 +174,21 @@ def handle_message(db: Session, patient: Patient, message: str, provider: CoachP
         )
         _alert(db, patient.id, Severity.info, "dose_question", "Hasta ilaç dozu/değişikliği hakkında soru sordu.")
     else:
-        reply = provider.reply(db, patient, message)
+        try:
+            reply = provider.reply(db, patient, message)
+        except Exception as exc:  # sağlayıcı kendi içinde düşemezse son güvenlik ağı
+            logger.warning("Koç sağlayıcısı hata verdi (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
+            reply = RuleBasedCoach().reply(db, patient, message).model_copy(update={"guardrail_action": "llm_fallback"})
         out = gr.check_output(reply.message)
         if not out.allowed:
             reply = CoachReply(
                 message=gr.BLOCKED_OUTPUT_REPLY, risk_level=RiskLevel.medium, escalate_to_clinician=False,
                 guardrail_action=f"{out.action.value}:{out.category}",
             )
+        elif reply.risk_level == RiskLevel.emergency:
+            _alert(db, patient.id, Severity.critical, "coach_emergency", "Koç yanıtı acil yönlendirme içeriyor.")
         elif reply.escalate_to_clinician:
-            _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi (düşük uyum).")
+            _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi.")
 
     db.add(
         CoachMessage(

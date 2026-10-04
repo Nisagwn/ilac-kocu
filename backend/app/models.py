@@ -20,6 +20,7 @@ from sqlalchemy import (
 from sqlalchemy.orm import Mapped, mapped_column, relationship
 
 from app.db import Base
+from app.services.rag.vector_type import EMBEDDING_DIM, EmbeddingVector
 
 
 def utcnow() -> datetime:
@@ -158,6 +159,31 @@ class DoseLog(Base):
     logged_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
+class ReminderLog(Base):
+    """Gönderilmiş doz hatırlatmaları: bir planlı doz için gün başına en fazla bir bildirim."""
+
+    __tablename__ = "reminder_logs"
+    __table_args__ = (UniqueConstraint("schedule_id", "scheduled_date", name="uq_reminder_per_schedule_day"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    schedule_id: Mapped[int] = mapped_column(ForeignKey("medication_schedules.id", ondelete="CASCADE"))
+    scheduled_date: Mapped[date] = mapped_column(Date)
+    sent_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class PushSubscription(Base):
+    """Tarayıcı web push aboneliği (Web Push Protocol; endpoint + şifreleme anahtarları)."""
+
+    __tablename__ = "push_subscriptions"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"), index=True)
+    endpoint: Mapped[str] = mapped_column(Text, unique=True)
+    p256dh: Mapped[str] = mapped_column(String(255))
+    auth: Mapped[str] = mapped_column(String(255))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
 class Measurement(Base):
     __tablename__ = "measurements"
 
@@ -207,4 +233,29 @@ class EducationContent(Base):
     source_url: Mapped[str | None] = mapped_column(String(500))
     tags: Mapped[str | None] = mapped_column(String(200))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
-    # embedding (pgvector) M4'te ayrı migration ile eklenecek
+    # M4 RAG (migration 0003_rag): PostgreSQL'de pgvector vector(384), SQLite'ta JSON
+    kind: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
+    drug_key: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)  # openfda: etken madde
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # klinisyen gözden geçirmesi yapıldı mı
+    embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector(EMBEDDING_DIM), deferred=True)
+    embedding_model: Mapped[str | None] = mapped_column(String(80))
+
+
+class LlmUsage(Base):
+    """LLM çağrılarının token/maliyet kaydı (maliyet limiti için). Mesaj içeriği tutulmaz.
+
+    Hasta silinse de kayıt anonim toplam olarak kalır (patient_id NULL olur).
+    """
+
+    __tablename__ = "llm_usage"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int | None] = mapped_column(ForeignKey("patients.id", ondelete="SET NULL"), index=True)
+    purpose: Mapped[str] = mapped_column(String(20))  # coach | summary
+    model: Mapped[str] = mapped_column(String(80))
+    input_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    output_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_read_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cache_write_tokens: Mapped[int] = mapped_column(Integer, default=0)
+    cost_usd: Mapped[float] = mapped_column(Float, default=0.0)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

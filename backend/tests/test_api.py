@@ -250,3 +250,33 @@ def test_drug_label_endpoint(client, patient, monkeypatch):
     r = client.get("/drugs/label?name=Glifor", headers=h)
     assert r.status_code == 200 and r.json()["resolved_generic"] == "metformin"
     assert client.get("/drugs/label?name=Glifor").status_code == 401
+
+
+def test_me_with_seed_style_local_email(client, db):
+    """Seed hesapları (@demo.local) EmailStr'ın reddettiği bir alan adı kullanır; /auth/me 500 vermemeli."""
+    from app.models import Role, User
+    from app.security import create_access_token, hash_password
+
+    u = User(email="hasta@demo.local", password_hash=hash_password("demo12345"), full_name="Demo", role=Role.caregiver)
+    db.add(u)
+    db.commit()
+    r = client.get("/auth/me", headers={"Authorization": f"Bearer {create_access_token(u.id, u.role.value)}"})
+    assert r.status_code == 200, r.text
+    assert r.json()["email"] == "hasta@demo.local"
+
+
+def test_rule_based_coach_cites_relevant_education(client, patient, db):
+    """LLM anahtarı olmadan da koç, mesajla ilgili kürate içeriği kaynak olarak gösterir (RAG)."""
+    from app.models import EducationContent
+
+    db.add(EducationContent(
+        title="Akşam dozlarını unutmamak için ipuçları",
+        body="Akşam ilacını akşam yemeği gibi sabit bir rutine bağlamak unutmayı azaltır. Telefon alarmı da yardımcı olur.",
+        source_name="WHO", source_url="https://www.who.int", tags="uyum",
+    ))
+    db.commit()
+    pid, h = patient[0]["patient_id"], patient[1]
+    add_med(client, pid, h)
+    r = client.post("/coach/chat", json={"message": "Akşam ilacımı sürekli unutuyorum"}, headers=h).json()
+    assert r["sources"][0]["title"].startswith("Akşam dozlarını unutmamak")
+    assert "İlgili bilgi" in r["message"]

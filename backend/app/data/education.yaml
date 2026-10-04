@@ -1,0 +1,331 @@
+# Kürate hasta eğitim içeriği (RAG korpusu) — tip 2 diyabet, hipertansiyon, ilaç uyumu.
+#
+# Kurallar:
+#  - Sade dil, 2–5 cümle; doz önerisi YOK, teşhis YOK. İlaçla ilgili kararlar daima hekime/eczacıya yönlendirilir.
+#  - Kaynaklar yetkili kurumların genel sayfalarıdır; metinler bu kaynaklardaki genel önerilerin Türkçe,
+#    sadeleştirilmiş özetidir (birebir çeviri değildir).
+#  - reviewed: false -> klinisyen gözden geçirmesi bekleniyor. Klinisyen onayından sonra true yapılır.
+#  - Seed (python -m app.seed) başlığa göre upsert eder; başlığı değiştirmek yeni kayıt oluşturur.
+#  - tags: virgülle ayrılmış, aksansız küçük harf (diyabet, hipertansiyon, uyum, olcum, beslenme, hipoglisemi, ...)
+
+- title: İlacı günlük rutine bağlamak
+  body: >-
+    İlacınızı her gün zaten yaptığınız bir işe bağlamak unutmayı azaltır; buna "alışkanlık zinciri" denir.
+    Örneğin sabah ilacını kahvaltı masasına, akşam ilacını diş fırçalamaya eşleyebilirsiniz.
+    İlaç kutusunu bu işi yaptığınız yerde görünür tutmak hatırlamayı kolaylaştırır.
+    İlaç saatinizin yemekle ilişkisini hekiminize veya eczacınıza sorarak rutini buna göre seçin.
+  source_name: WHO — Adherence to long-term therapies (2003)
+  source_url: https://iris.who.int/handle/10665/42682
+  tags: uyum,ipucu,aliskanlik
+  reviewed: false
+
+- title: Akşam dozlarını unutmamak için ipuçları
+  body: >-
+    Akşam dozları, günün yorgunluğu ve değişen programlar nedeniyle en sık unutulan dozlardır.
+    Akşam ilacınızı akşam yemeği ya da yatmadan önceki sabit bir alışkanlıkla eşleştirin.
+    Telefonunuza tekrarlayan bir hatırlatıcı kurmak veya uygulamadaki hatırlatmaları açmak işe yarar.
+    Dışarıda olacağınız akşamlar için önceden plan yapın ve gerekirse eczacınıza nasıl yanınızda taşıyabileceğinizi sorun.
+  source_name: WHO — Adherence to long-term therapies (2003)
+  source_url: https://iris.who.int/handle/10665/42682
+  tags: uyum,ipucu,aksam,hatirlatma
+  reviewed: false
+
+- title: Haftalık ilaç kutusu kullanmak
+  body: >-
+    Günlere ve saatlere bölünmüş haftalık ilaç kutusu, ilacı alıp almadığınızı bir bakışta görmenizi sağlar.
+    Kutuyu haftada bir, sakin bir zamanda doldurmak hata riskini azaltır.
+    Kutuyu nasıl dolduracağınızdan emin değilseniz eczacınızdan yardım isteyin.
+  source_name: NHS — Medicines information
+  source_url: https://www.nhs.uk/medicines/
+  tags: uyum,ipucu,ilac
+  reviewed: false
+
+- title: Bir dozu kaçırdığınızda ne yapmalı
+  body: >-
+    Bir dozu kaçırdığınızı fark ettiğinizde, telafi etmek için kendi başınıza ilacınızın miktarını veya saatini değiştirmeyin.
+    Her ilacın kaçırılan doz kuralı farklıdır; ne yapmanız gerektiğini hekiminize veya eczacınıza danışın.
+    İlacınızın prospektüsündeki "kullanmayı unutursanız" bölümü de yol gösterir.
+    Dozları sık kaçırıyorsanız bunu utanmadan hekiminizle konuşun; birlikte daha uygun bir plan yapılabilir.
+  source_name: NHS — Medicines information
+  source_url: https://www.nhs.uk/medicines/
+  tags: uyum,kacirilan-doz,ilac
+  reviewed: false
+
+- title: İlacı kendi başınıza bırakmamak
+  body: >-
+    Yüksek tansiyon ve tip 2 diyabet çoğu zaman belirti vermez; kendinizi iyi hissetmeniz ilacın artık gereksiz olduğu anlamına gelmez.
+    İlacı kendi kararınızla bırakmak, değerlerin fark edilmeden yükselmesine yol açabilir.
+    İlacınızla ilgili bir endişeniz varsa bırakmadan önce hekiminizle konuşun.
+  source_name: WHO — Hypertension (bilgi notu)
+  source_url: https://www.who.int/news-room/fact-sheets/detail/hypertension
+  tags: uyum,ilac,hipertansiyon,diyabet
+  reviewed: false
+
+- title: Yan etki fark ettiğinizde
+  body: >-
+    İlaca bağlı olabileceğini düşündüğünüz bir yakınma fark ederseniz ne zaman başladığını ve nasıl seyrettiğini not edin.
+    İlacı kendi başınıza bırakmak ya da azaltmak yerine hekiminize veya eczacınıza danışın.
+    Yüzde, dudakta şişlik, nefes almada zorluk gibi ciddi alerji belirtilerinde hemen 112'yi arayın.
+  source_name: NHS — Medicines information
+  source_url: https://www.nhs.uk/medicines/
+  tags: uyum,yan-etki,ilac,acil
+  reviewed: false
+
+- title: Metformin ve mide-bağırsak yakınmaları
+  body: >-
+    Metformin kullanan bazı kişilerde bulantı, ishal, karın ağrısı veya ağızda metalik tat gibi mide-bağırsak yakınmaları görülebilir.
+    Bu yakınmalar çoğu zaman tedavinin başında olur ve zamanla azalabilir.
+    Yakınmalarınız sürüyor ya da günlük yaşamınızı etkiliyorsa ilacı kendi başınıza bırakmadan veya değiştirmeden hekiminizle konuşun.
+  source_name: NHS — Metformin
+  source_url: https://www.nhs.uk/medicines/metformin/
+  tags: diyabet,ilac,yan-etki,metformin
+  reviewed: false
+
+- title: Düşük kan şekeri (hipoglisemi) belirtileri
+  body: >-
+    Kan şekeri düştüğünde titreme, terleme, çarpıntı, ani açlık hissi, baş dönmesi, sinirlilik ve bulanık görme olabilir.
+    İlerlerse dikkat dağınıklığı, konuşma güçlüğü ve bilinç bulanıklığı görülebilir.
+    Bazı şeker ilaçlarını kullananlarda risk daha yüksektir; belirtileri tanımak ve ölçüm yapmak önemlidir.
+    Hekiminizle önceden bir "düşük şeker planı" konuşun.
+  source_name: NHS — Low blood sugar (hypoglycaemia)
+  source_url: https://www.nhs.uk/conditions/low-blood-sugar-hypoglycaemia/
+  tags: diyabet,hipoglisemi,belirti
+  reviewed: false
+
+- title: Düşük şekerde ne zaman yardım almalı
+  body: >-
+    Bilinç bulanıklığı, bayılma, nöbet ya da yutamayacak kadar kötü olma durumunda hemen 112'yi arayın.
+    Yakınlarınızın düşük şeker belirtilerini ve bu durumda ne yapacaklarını bilmesi önemlidir.
+    Düşük şeker atakları sık tekrarlıyorsa veya gece oluyorsa bunu mutlaka hekiminize bildirin; tedavinizin gözden geçirilmesi gerekebilir.
+  source_name: NHS — Low blood sugar (hypoglycaemia)
+  source_url: https://www.nhs.uk/conditions/low-blood-sugar-hypoglycaemia/
+  tags: diyabet,hipoglisemi,acil
+  reviewed: false
+
+- title: Yüksek kan şekeri belirtileri
+  body: >-
+    Aşırı susama, sık idrara çıkma, yorgunluk, bulanık görme ve yaraların geç iyileşmesi yüksek kan şekerinin belirtileri olabilir.
+    Ölçümleriniz hekiminizin belirlediği aralığın sürekli üzerindeyse bunu kontrol randevusunu beklemeden hekiminize bildirin.
+    Kusma, nefes almada zorluk veya bilinç bulanıklığı varsa 112'yi arayın.
+  source_name: CDC — Diabetes
+  source_url: https://www.cdc.gov/diabetes/index.html
+  tags: diyabet,hiperglisemi,belirti
+  reviewed: false
+
+- title: Açlık kan şekeri nasıl ölçülür
+  body: >-
+    Açlık kan şekeri, en az 8 saat bir şey yemeden (su hariç) genellikle sabah ölçülür.
+    Ölçümden önce ellerinizi ılık suyla yıkayıp iyice kurulayın; parmaktaki şeker kalıntısı sonucu yanıltabilir.
+    Ölçümü her gün benzer saatte yapmak ve sonucu hemen kaydetmek takibi kolaylaştırır.
+    Ne sıklıkla ölçüm yapmanız gerektiğini hekiminiz belirler.
+  source_name: ADA — Standards of Care in Diabetes
+  source_url: https://professional.diabetes.org/standards-of-care
+  tags: diyabet,olcum,seker
+  reviewed: false
+
+- title: Şeker ölçüm cihazını doğru kullanmak
+  body: >-
+    Test çubuklarının son kullanma tarihini kontrol edin ve kutusunu kapalı, serin ve kuru bir yerde saklayın.
+    Parmak ucunun yan tarafından ölçüm yapmak daha az acıtır; ölçüm yerini değiştirmek cildi korur.
+    Cihazınızın kullanımından emin değilseniz eczacınızdan veya diyabet hemşirenizden göstermesini isteyin.
+  source_name: ADA — Standards of Care in Diabetes
+  source_url: https://professional.diabetes.org/standards-of-care
+  tags: diyabet,olcum,cihaz
+  reviewed: false
+
+- title: Evde tansiyon ölçümü nasıl yapılır
+  body: >-
+    Ölçümden önce 30 dakika kahve, sigara ve egzersizden kaçının, idrarınızı yapın ve 5 dakika sırtınız destekli oturarak dinlenin.
+    Ayaklarınız yere düz bassın, bacak bacak üstüne atmayın; manşet çıplak üst kola, kalp hizasında takılsın.
+    Ölçüm sırasında konuşmayın; 1–2 dakika arayla iki ölçüm yapıp ikisini de kaydedin.
+    Üst koldan ölçen, doğrulanmış bir cihaz ve kolunuza uygun manşet boyutu kullanın.
+  source_name: ESH — European Society of Hypertension
+  source_url: https://www.eshonline.org/
+  tags: hipertansiyon,olcum,tansiyon
+  reviewed: false
+
+- title: Tansiyon ölçümlerini ne zaman yapıp kaydetmeli
+  body: >-
+    Ev ölçümleri genellikle sabah (ilaç almadan ve kahvaltıdan önce) ve akşam olmak üzere günde iki kez yapılır.
+    Özellikle kontrol randevunuzdan önceki günlerde düzenli ölçüm yapmak hekiminize daha güvenilir bilgi verir.
+    Her ölçümün tarihini, saatini ve sonucunu kaydedin; tek bir yüksek değer yerine ortalamalar önemlidir.
+    Ölçüm sıklığınızı hekiminizle birlikte belirleyin.
+  source_name: NHS — Blood pressure test
+  source_url: https://www.nhs.uk/conditions/blood-pressure-test/
+  tags: hipertansiyon,olcum,kayit
+  reviewed: false
+
+- title: Çok yüksek tansiyon ve acil belirtiler
+  body: >-
+    Tansiyon yüksekliğine şiddetli baş ağrısı, göğüs ağrısı, nefes darlığı, konuşma bozukluğu, yüzde kayma veya kolda-bacakta güçsüzlük eşlik ediyorsa hemen 112'yi arayın.
+    Belirti olmadan ölçülen tek bir yüksek değerde birkaç dakika dinlenip ölçümü tekrarlayın.
+    Değerleriniz tekrar tekrar yüksek çıkıyorsa aynı gün hekiminize ulaşın.
+  source_name: NHS — High blood pressure (hypertension)
+  source_url: https://www.nhs.uk/conditions/high-blood-pressure-hypertension/
+  tags: hipertansiyon,acil,belirti
+  reviewed: false
+
+- title: Tuz tüketimini azaltmak
+  body: >-
+    Dünya Sağlık Örgütü yetişkinlerin günde 5 gramdan (yaklaşık bir çay kaşığı) az tuz tüketmesini önerir; fazla tuz tansiyonu yükseltir.
+    Tuzun çoğu sofradaki tuzluktan değil; ekmek, peynir, zeytin, turşu, salça, işlenmiş et ve hazır gıdalardan gelir.
+    Yemeğe tuz eklemeden önce tadına bakın, tuz yerine nane, kekik, limon ve baharat kullanın.
+    Paketli ürünlerde etiketteki tuz/sodyum miktarını karşılaştırın.
+  source_name: WHO — Salt reduction (bilgi notu)
+  source_url: https://www.who.int/news-room/fact-sheets/detail/salt-reduction
+  tags: hipertansiyon,beslenme,tuz
+  reviewed: false
+
+- title: Tansiyon dostu beslenme
+  body: >-
+    Sebze, meyve, tam tahıl, baklagil ve az yağlı süt ürünlerinden zengin bir beslenme tansiyonu düşürmeye yardımcı olur.
+    Kızartma, işlenmiş et ve doymuş yağdan zengin yiyecekleri sınırlamak kalp sağlığını destekler.
+    Kişisel beslenme planı için hekiminizden veya bir diyetisyenden destek alın.
+  source_name: NHS — High blood pressure (hypertension)
+  source_url: https://www.nhs.uk/conditions/high-blood-pressure-hypertension/
+  tags: hipertansiyon,beslenme
+  reviewed: false
+
+- title: Diyabette tabak modeli
+  body: >-
+    Tabağınızın yarısını nişastasız sebzelerle (salata, brokoli, kabak gibi), dörtte birini yağsız protein ile, dörtte birini tam tahıllı karbonhidratlarla doldurun.
+    Bu basit model, porsiyon saymadan dengeli öğün hazırlamaya yardımcı olur.
+    Öğünleri düzenli saatlerde yemek kan şekerinin dalgalanmasını azaltabilir.
+    Size özel öğün planı için diyetisyeninize danışın.
+  source_name: CDC — Diabetes
+  source_url: https://www.cdc.gov/diabetes/index.html
+  tags: diyabet,beslenme,ogun
+  reviewed: false
+
+- title: Şekerli içecekler ve tatlılar
+  body: >-
+    Gazlı içecekler, hazır meyve suları ve şekerli çay-kahve kan şekerini hızla yükseltir.
+    Susadığınızda su, maden suyu veya şekersiz içecekleri tercih edin.
+    Tatlıyı tamamen yasaklamak yerine küçük porsiyonlar ve seyrek tüketim konusunda diyetisyeninizle plan yapın.
+  source_name: WHO — Diabetes (bilgi notu)
+  source_url: https://www.who.int/news-room/fact-sheets/detail/diabetes
+  tags: diyabet,beslenme,seker
+  reviewed: false
+
+- title: Fiziksel aktivite ve hareket
+  body: >-
+    Dünya Sağlık Örgütü yetişkinler için haftada en az 150 dakika orta şiddette hareket (örneğin tempolu yürüyüş) önerir.
+    Düzenli hareket hem kan şekerini hem tansiyonu olumlu etkiler; uzun süre oturmayı kısa yürüyüşlerle bölmek de faydalıdır.
+    Kalp, göz veya ayak sorununuz varsa yeni bir egzersiz programına başlamadan önce hekiminizle konuşun.
+  source_name: WHO — Physical activity (bilgi notu)
+  source_url: https://www.who.int/news-room/fact-sheets/detail/physical-activity
+  tags: diyabet,hipertansiyon,aktivite,egzersiz
+  reviewed: false
+
+- title: Egzersiz sırasında şeker düşmesine dikkat
+  body: >-
+    Bazı şeker ilaçlarını kullananlarda uzun veya yoğun egzersiz sırasında ya da sonrasında kan şekeri düşebilir.
+    Egzersize çıkarken yanınızda hızlı etkili şekerli bir yiyecek ve kimlik/diyabet bilgisi bulundurun.
+    Titreme, terleme, baş dönmesi hissederseniz egzersizi bırakın; egzersizle ilgili kişisel planınızı hekiminizle konuşun.
+  source_name: ADA — Standards of Care in Diabetes
+  source_url: https://professional.diabetes.org/standards-of-care
+  tags: diyabet,aktivite,hipoglisemi
+  reviewed: false
+
+- title: Diyabette ayak bakımı
+  body: >-
+    Ayaklarınızı her gün kesik, kabarcık, kızarıklık, renk değişikliği ve şişlik açısından kontrol edin; gerekirse ayna kullanın.
+    Ayaklarınızı ılık suyla yıkayıp özellikle parmak aralarını iyice kurulayın, çıplak ayakla yürümeyin.
+    Rahat, ayağı sıkmayan ayakkabı ve dikişsiz çorap giyin; nasırları kendiniz kesmeyin.
+    İyileşmeyen bir yara, akıntı veya renk değişikliği fark ederseniz vakit kaybetmeden hekiminize başvurun.
+  source_name: IWGDF — Diabetic foot guidelines
+  source_url: https://iwgdfguidelines.org/
+  tags: diyabet,ayak,bakim
+  reviewed: false
+
+- title: Hasta olduğunuz günler (ateş, kusma, ishal)
+  body: >-
+    Ateş, kusma, ishal veya yemek yiyememe gibi durumlar kan şekerini ve bazı ilaçların etkisini değiştirebilir.
+    Bu günlerde ilaçlarınızı nasıl kullanacağınızı kendi başınıza belirlemeyin; hekiminize veya eczacınıza danışın.
+    Bol sıvı almaya çalışın ve ölçümlerinizi daha sık yapıp kaydedin.
+    Sıvı tutamıyorsanız veya bilinç bulanıklığı varsa acil yardım alın; önceden hekiminizle bir "hasta günü planı" hazırlamak faydalıdır.
+  source_name: NHS — Type 2 diabetes
+  source_url: https://www.nhs.uk/conditions/type-2-diabetes/
+  tags: diyabet,hastagunu,ilac
+  reviewed: false
+
+- title: Sigarayı bırakmak
+  body: >-
+    Sigara damarlara zarar verir; diyabet ve yüksek tansiyonla birlikte kalp krizi ve inme riskini belirgin şekilde artırır.
+    Bırakmak her yaşta fayda sağlar ve destek almak başarı şansını artırır.
+    Türkiye'de ALO 171 Sigara Bırakma Danışma Hattı'nı arayabilir, aile hekiminizden sigara bırakma polikliniği hakkında bilgi alabilirsiniz.
+  source_name: T.C. Sağlık Bakanlığı
+  source_url: https://www.saglik.gov.tr/
+  tags: diyabet,hipertansiyon,sigara,yasam-tarzi
+  reviewed: false
+
+- title: Alkol ve kronik hastalık ilaçları
+  body: >-
+    Alkol tansiyonu yükseltebilir ve bazı şeker ilaçlarıyla birlikte kan şekerinin düşmesine yol açabilir.
+    Alkol ile kullandığınız ilaçlar arasında etkileşim olup olmadığını hekiminize veya eczacınıza sorun.
+    Alkol tüketimini azaltmak hem tansiyon hem kan şekeri kontrolüne yardımcı olur.
+  source_name: NHS — High blood pressure (hypertension)
+  source_url: https://www.nhs.uk/conditions/high-blood-pressure-hypertension/
+  tags: diyabet,hipertansiyon,alkol,etkilesim
+  reviewed: false
+
+- title: Uyku ve stres yönetimi
+  body: >-
+    Yetersiz uyku ve uzun süreli stres tansiyonu ve kan şekeri kontrolünü olumsuz etkileyebilir.
+    Her gün benzer saatlerde yatıp kalkmak, yatmadan önce ekran süresini azaltmak uyku kalitesini artırır.
+    Nefes egzersizleri, yürüyüş ve sevdiğiniz etkinliklere zaman ayırmak stresi azaltmaya yardımcı olur.
+    Horlama ve gündüz aşırı uyku hali varsa hekiminize söyleyin.
+  source_name: CDC — High blood pressure
+  source_url: https://www.cdc.gov/high-blood-pressure/index.html
+  tags: hipertansiyon,diyabet,uyku,stres,yasam-tarzi
+  reviewed: false
+
+- title: Kilo yönetimi
+  body: >-
+    Fazla kilolu kişilerde küçük bir kilo kaybı bile kan şekeri ve tansiyon kontrolüne katkı sağlayabilir.
+    Hızlı ve katı diyetler yerine sürdürülebilir küçük değişiklikler (porsiyon küçültme, daha çok hareket) daha kalıcıdır.
+    Size uygun hedefi hekiminiz veya diyetisyeninizle birlikte belirleyin.
+  source_name: TEMD — Türkiye Endokrinoloji ve Metabolizma Derneği
+  source_url: https://temd.org.tr/
+  tags: diyabet,hipertansiyon,kilo,beslenme
+  reviewed: false
+
+- title: HbA1c ve düzenli kontroller
+  body: >-
+    HbA1c, son yaklaşık 3 ayın ortalama kan şekeri hakkında bilgi veren bir kan testidir.
+    Kişisel HbA1c hedefinizi ve test sıklığını hekiminiz belirler.
+    Diyabette düzenli göz muayenesi, böbrek testleri ve ayak muayenesi komplikasyonları erken yakalamaya yardımcı olur; kontrol randevularınızı aksatmayın.
+  source_name: TEMD — Türkiye Endokrinoloji ve Metabolizma Derneği
+  source_url: https://temd.org.tr/
+  tags: diyabet,kontrol,hba1c
+  reviewed: false
+
+- title: Hekim randevusuna hazırlık
+  body: >-
+    Randevuya ölçüm kayıtlarınızı, kullandığınız tüm ilaçların (bitkisel ürünler dahil) listesini ve sorularınızı yazılı olarak götürün.
+    Atladığınız dozları ve nedenlerini açıkça söylemek, hekiminizin size en uygun planı yapmasına yardımcı olur.
+    Anlamadığınız bir konu olursa tekrar açıklanmasını istemekten çekinmeyin.
+  source_name: T.C. Sağlık Bakanlığı
+  source_url: https://www.saglik.gov.tr/
+  tags: uyum,kontrol,iletisim
+  reviewed: false
+
+- title: Bitkisel ürünler ve ilaç etkileşimi
+  body: >-
+    Bitkisel çaylar, takviyeler ve bazı yiyecekler (örneğin greyfurt) ilaçlarınızın etkisini değiştirebilir.
+    "Doğal" olması zararsız olduğu anlamına gelmez; yeni bir ürün kullanmadan önce eczacınıza veya hekiminize sorun.
+    Kullandığınız tüm ürünleri ilaç listenize ekleyin.
+  source_name: T.C. Sağlık Bakanlığı — Türkiye İlaç ve Tıbbi Cihaz Kurumu (TİTCK)
+  source_url: https://www.titck.gov.tr/
+  tags: ilac,etkilesim,bitkisel
+  reviewed: false
+
+- title: İlaçları doğru saklamak
+  body: >-
+    İlaçları serin, kuru ve güneş görmeyen bir yerde, çocukların ulaşamayacağı şekilde saklayın; banyo dolabı nemli olduğu için uygun değildir.
+    Son kullanma tarihi geçmiş ilaçları kullanmayın, eczaneye teslim edin.
+    Seyahatte ilaçlarınızı el bagajınızda ve orijinal kutusunda taşıyın; yeterli miktarda yanınızda olsun.
+  source_name: T.C. Sağlık Bakanlığı — Türkiye İlaç ve Tıbbi Cihaz Kurumu (TİTCK)
+  source_url: https://www.titck.gov.tr/
+  tags: ilac,uyum,saklama
+  reviewed: false

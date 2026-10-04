@@ -39,7 +39,7 @@ class TokenOut(BaseModel):
 
 class UserOut(ORM):
     id: int
-    email: EmailStr
+    email: str  # çıktı: doğrulama girişte yapılır (.local demo alan adları EmailStr ile reddedilir)
     full_name: str
     role: Role
     patient_id: int | None = None
@@ -227,3 +227,26 @@ class CoachMessageOut(ORM):
 
 
 MeasurementCreated.model_rebuild()
+
+
+# ---------- Web push ----------
+class PushKeys(BaseModel):
+    p256dh: str = Field(min_length=1, max_length=255)
+    auth: str = Field(min_length=1, max_length=255)
+
+
+class PushSubscribeIn(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+    keys: PushKeys
+
+
+class PushUnsubscribeIn(BaseModel):
+    endpoint: str = Field(min_length=1, max_length=2048)
+
+
+class VapidKeyOut(BaseModel):
+    public_key: str
+
+
+class PushTestOut(BaseModel):
+    sent: int
