@@ -38,7 +38,12 @@ FALLBACK_PRICE = ModelPrice(10.0, 50.0, 1.0)
 CACHE_WRITE_MULTIPLIER = 1.25
 
 
+FREE_PRICE = ModelPrice(0.0, 0.0, 0.0)
+
+
 def price_for(model: str) -> ModelPrice:
+    if model.endswith(":free"):  # OpenRouter ücretsiz uçları kredi harcamaz
+        return FREE_PRICE
     return PRICES.get(model, FALLBACK_PRICE)
 
 

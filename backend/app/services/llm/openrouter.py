@@ -11,6 +11,7 @@ Maliyet: `usage.include=true` ile OpenRouter her yanıtta gerçek maliyeti (USD)
 """
 
 import json
+import time
 from types import SimpleNamespace
 from typing import Any
 
@@ -28,8 +29,20 @@ _STOP_REASONS = {
 }
 
 
+# Ücretsiz modellerde dakikalık istek sınırı (429) sık görülür: kısa beklemeyle yeniden denenir
+RATE_LIMIT_RETRIES = 2
+RATE_LIMIT_MAX_WAIT = 20.0  # saniye; Retry-After daha uzunsa beklenmez, kural tabanlı koça düşülür
+
+
 class OpenRouterError(RuntimeError):
     pass
+
+
+def _retry_after(resp: httpx.Response, attempt: int) -> float:
+    try:
+        return float(resp.headers.get("retry-after", ""))
+    except ValueError:
+        return 5.0 * (attempt + 1)
 
 
 def _text_of_blocks(content: Any) -> str:
@@ -169,8 +182,9 @@ class _Messages:
 class OpenRouterClient:
     """`client.messages.create(...)` arayüzü sunar (Anthropic SDK ile aynı)."""
 
-    def __init__(self, settings: Settings, http: httpx.Client | None = None):
+    def __init__(self, settings: Settings, http: httpx.Client | None = None, sleep=time.sleep):
         self.settings = settings
+        self._sleep = sleep
         self.messages = _Messages(self)
         self._http = http or httpx.Client(
             base_url=settings.openrouter_base_url,
@@ -184,7 +198,14 @@ class OpenRouterClient:
 
     def complete(self, **kwargs) -> SimpleNamespace:
         payload = build_payload(self.settings, **kwargs)
-        resp = self._http.post("/chat/completions", json=payload)
+        for attempt in range(RATE_LIMIT_RETRIES + 1):
+            resp = self._http.post("/chat/completions", json=payload)
+            if resp.status_code != 429 or attempt == RATE_LIMIT_RETRIES:
+                break
+            wait = _retry_after(resp, attempt)
+            if wait > RATE_LIMIT_MAX_WAIT:
+                break
+            self._sleep(wait)
         if resp.status_code >= 400:
             # Gövde hasta verisi içerebilecek istemi yansıtabilir; yalnızca durum kodu loglanır
             raise OpenRouterError(f"OpenRouter HTTP {resp.status_code}")

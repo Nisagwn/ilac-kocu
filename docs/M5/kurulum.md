@@ -103,6 +103,17 @@ OPENROUTER_DATA_COLLECTION=deny           # yalnızca istemleri saklamayan/eğit
 | `anthropic/claude-haiku-4.5` | 1 / 5 | Yarı maliyet; kısa koç yanıtları için yeterli olabilir |
 | `openai/gpt-5.4-mini` | 0.75 / 4.5 | Başka sağlayıcı; değiştirirseniz `python -m scripts.eval_coach --live` ile guardrail davranışını yeniden doğrulayın |
 
+**Ücretsiz seçenek (kredi harcamaz):** `LLM_MODEL=qwen/qwen3.8-27b:free`. 2026-10-04'te ücretsiz araç destekli modeller koç hattında denendi:
+
+| Model | `data_collection=deny` | Araç kullanımı | Sonuç |
+|---|---|---|---|
+| `qwen/qwen3.8-27b:free` | ✅ | ✅ uyum + eğitim araması, RAG kaynakları | Veriye dayalı ve kaynaklı yanıt; **gecikme 40–200 sn**, dakikalık istek sınırı (429) |
+| `nvidia/nemotron-3-super-120b-a12b:free` | ❌ (yalnızca `allow`) | ❌ | Araç çağırmadan yanıtladı |
+| `dots-studio/dots-3-note-preview:free` | ✅ | ❌ | Araç çağırmadı, Türkçe-İngilizce karışık |
+| `nvidia/nemotron-3-ultra-550b-a55b:free`, `openrouter/free` | — | — | JSON şemasına uymadı |
+
+Ücretsiz modelle önerilen ayarlar: `LLM_TIMEOUT_SECONDS=90`, `LLM_MAX_TOOL_ITERATIONS=3`. Adaptör 429 yanıtlarını `Retry-After` ile 2 kez yeniden dener; yine başarısız olursa koç kural tabanlı yanıta düşer. Ücretsiz uçların fiyatı bütçede 0 sayılır. Canlı demo için gecikme sorun olursa ücretli `anthropic/claude-haiku-4.5` önerilir.
+
 Kabaca: bir koç isteği (en fazla 4 model çağrısı) ≈ 12 bin girdi + 1 bin çıktı token → Sonnet 5.5'te ≈ 3–4 sent. OpenRouter her yanıtta gerçek maliyeti döndürür ve bütçe (`llm_usage`) bu tutarla tutulur.
 
 Doğrudan Anthropic API kullanmak için `OPENROUTER_API_KEY` boş bırakılıp `ANTHROPIC_API_KEY=sk-ant-...` girilir (`LLM_PROVIDER=auto` ikisinden hangisi doluysa onu seçer; ikisi de doluysa OpenRouter).

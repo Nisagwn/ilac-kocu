@@ -30,7 +30,7 @@ def chat_response(content=None, tool_calls=None, finish="stop", cost=0.0012, pro
     }
 
 
-def mock_client(responses: list, sent: list, settings: Settings | None = None) -> OpenRouterClient:
+def mock_client(responses: list, sent: list, settings: Settings | None = None, sleeps: list | None = None) -> OpenRouterClient:
     def handler(request: httpx.Request) -> httpx.Response:
         sent.append(json.loads(request.content))
         item = responses.pop(0)
@@ -40,7 +40,7 @@ def mock_client(responses: list, sent: list, settings: Settings | None = None) -
 
     s = settings or or_settings()
     http = httpx.Client(base_url=s.openrouter_base_url, transport=httpx.MockTransport(handler))
-    return OpenRouterClient(s, http=http)
+    return OpenRouterClient(s, http=http, sleep=(sleeps.append if sleeps is not None else lambda _: None))
 
 
 # ---------------- Ayar çözümleme ----------------
@@ -153,3 +153,24 @@ def test_input_guardrail_still_runs_before_openrouter(db, patient):
     provider = ClaudeCoachProvider(client=mock_client([], sent), settings=or_settings())
     reply = handle_message(db, pat, "göğsümde baskı var", provider=provider)
     assert reply.risk_level == "emergency" and sent == []  # LLM'e hiç istek gitmedi
+
+
+def test_rate_limit_429_is_retried_then_succeeds():
+    sent, sleeps = [], []
+    client = mock_client([429, chat_response(content="tamam")], sent, sleeps=sleeps)
+    r = client.messages.create(messages=[{"role": "user", "content": "selam"}])
+    assert r.content[0].text == "tamam" and len(sent) == 2 and sleeps == [5.0]
+
+
+def test_rate_limit_gives_up_after_retries():
+    from app.services.llm.openrouter import OpenRouterError
+
+    client = mock_client([429, 429, 429], [], sleeps=[])
+    with pytest.raises(OpenRouterError, match="429"):
+        client.messages.create(messages=[{"role": "user", "content": "selam"}])
+
+
+def test_free_models_are_priced_zero():
+    from app.services.llm.pricing import cost_usd
+
+    assert cost_usd("qwen/qwen3.8-27b:free", 100_000, 10_000) == 0.0
