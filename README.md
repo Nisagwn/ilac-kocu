@@ -1,7 +1,6 @@
 # İlaç Uyumu ve Yaşam Tarzı Koçu
 
-<!-- KULLANICI: aşağıdaki <kullanici>/<depo> değerlerini gerçek GitHub yoluyla değiştirin (rozet bağlantısı iki yerde geçer) -->
-[![CI](https://github.com/<kullanici>/<depo>/actions/workflows/ci.yml/badge.svg)](https://github.com/<kullanici>/<depo>/actions/workflows/ci.yml)
+[![CI](https://github.com/Nisagwn/ilac-kocu/actions/workflows/ci.yml/badge.svg)](https://github.com/Nisagwn/ilac-kocu/actions/workflows/ci.yml)
 ![Python 3.12](https://img.shields.io/badge/python-3.12-blue)
 ![Next.js 15](https://img.shields.io/badge/Next.js-15-black)
 ![PostgreSQL 16 + pgvector](https://img.shields.io/badge/PostgreSQL-16%20%2B%20pgvector-336791)
