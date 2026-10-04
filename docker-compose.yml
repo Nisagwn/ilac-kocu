@@ -29,7 +29,15 @@ services:
       redis:
         condition: service_started
 
-  # frontend: M3'te eklenecek (Next.js PWA, port 3000)
+  web:
+    build: ./frontend
+    environment:
+      # Sunucu tarafı proxy FastAPI'ye Docker ağı üzerinden gider; tarayıcı yalnızca web'e konuşur.
+      API_URL: http://api:8000
+    ports: ["3000:3000"]
+    depends_on:
+      api:
+        condition: service_started
 
 volumes:
   pgdata:

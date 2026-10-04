@@ -1,0 +1,21 @@
+{
+  "name": "İlaç Koçu",
+  "short_name": "İlaç Koçu",
+  "description": "Tip 2 diyabet ve hipertansiyon için ilaç uyumu ve yaşam tarzı koçu",
+  "id": "/bugun",
+  "start_url": "/bugun",
+  "scope": "/",
+  "display": "standalone",
+  "orientation": "portrait",
+  "lang": "tr",
+  "dir": "ltr",
+  "theme_color": "#0f766e",
+  "background_color": "#ffffff",
+  "categories": ["health", "medical"],
+  "icons": [
+    { "src": "/icons/icon-192.png", "sizes": "192x192", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/icon-512.png", "sizes": "512x512", "type": "image/png", "purpose": "any" },
+    { "src": "/icons/maskable-192.png", "sizes": "192x192", "type": "image/png", "purpose": "maskable" },
+    { "src": "/icons/maskable-512.png", "sizes": "512x512", "type": "image/png", "purpose": "maskable" }
+  ]
+}

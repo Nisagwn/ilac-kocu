@@ -1,0 +1,35 @@
+<!doctype html>
+<html lang="tr">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <meta name="theme-color" content="#0f766e" />
+  <title>Çevrimdışı · İlaç Koçu</title>
+  <link rel="icon" href="/icons/icon-192.png" />
+  <style>
+    :root { color-scheme: light dark; --bg: #f8fafc; --fg: #0f172a; --muted: #475569; --card: #ffffff; --accent: #0f766e; }
+    @media (prefers-color-scheme: dark) { :root { --bg: #0b1120; --fg: #e2e8f0; --muted: #94a3b8; --card: #111827; --accent: #2dd4bf; } }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-height: 100vh; display: grid; place-items: center; padding: 16px;
+      font-family: system-ui, -apple-system, "Segoe UI", Roboto, sans-serif; background: var(--bg); color: var(--fg); }
+    main { max-width: 420px; width: 100%; background: var(--card); border-radius: 16px; padding: 28px 24px;
+      box-shadow: 0 1px 3px rgb(0 0 0 / .08); text-align: center; }
+    img { width: 64px; height: 64px; border-radius: 14px; }
+    h1 { font-size: 1.25rem; margin: 16px 0 8px; }
+    p { color: var(--muted); line-height: 1.5; margin: 0 0 12px; }
+    .urgent { color: var(--fg); font-weight: 600; }
+    button { margin-top: 8px; border: 0; border-radius: 10px; padding: 10px 18px; font: inherit; font-weight: 600;
+      background: var(--accent); color: #fff; cursor: pointer; }
+  </style>
+</head>
+<body>
+  <main>
+    <img src="/icons/icon-192.png" alt="" />
+    <h1>İnternet bağlantısı yok</h1>
+    <p>İlaç Koçu şu anda sunucuya ulaşamıyor. Sağlık verileriniz gizlilik nedeniyle cihazda saklanmadığı için bu sayfa çevrimdışı gösterilemiyor.</p>
+    <p>Bağlantınız geri geldiğinde yeniden deneyin. İlaçlarınızı her zamanki düzeninizde almaya devam edin.</p>
+    <p class="urgent">Acil bir durumda 112'yi arayın.</p>
+    <button type="button" onclick="location.reload()">Yeniden dene</button>
+  </main>
+</body>
+</html>
