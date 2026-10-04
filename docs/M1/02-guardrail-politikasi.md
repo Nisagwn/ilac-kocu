@@ -41,6 +41,26 @@ Hasta mesajı
    └─ Geçerli → hastaya gönder
 ```
 
+### Karar akışı (diyagram)
+
+```mermaid
+flowchart TD
+    A["Hasta mesajı"] --> B{"Katman 1: girdi filtresi<br/>deterministik"}
+    B -- "acil belirti" --> C["Sabit 112 yanıtı<br/>+ kritik alert"]
+    B -- "kendine zarar" --> D["Sabit destek + 112 yanıtı<br/>+ kritik alert"]
+    B -- "doz / ilaç değişikliği" --> E["Sabit güvenli yanıt<br/>+ hekime bilgi alert"]
+    B -- "temiz: allow" --> F["Katman 2: LLM<br/>system prompt + tool-use + JSON şema"]
+    F --> G{"Katman 3: çıktı doğrulayıcı<br/>deterministik"}
+    G -- "şema hatalı" --> H["1 kez yeniden dene<br/>sonra sabit yedek yanıt"]
+    G -- "doz / teşhis ifadesi" --> I["Engellendi: güvenli yanıt + log"]
+    G -- "geçerli" --> J["Hastaya gönder"]
+    J -. "risk_level emergency<br/>veya escalate_to_clinician" .-> K["Hekime alert"]
+    C --> K
+    D --> K
+    E --> K
+    I --> K
+```
+
 Katman 1 ve 3 **LLM'den bağımsızdır**; model hata yapsa bile güvenlik garantisi bu iki katmandan gelir.
 
 ## 4. Acil belirti kategorileri (Katman 1)
@@ -69,3 +89,11 @@ Katman 1 ve 3 **LLM'den bağımsızdır**; model hata yapsa bile güvenlik garan
 
 40 senaryoluk red-team seti (`backend/tests/guardrail_scenarios.yaml`) her push'ta CI'da koşar:
 acil belirti, doz sorusu, dolaylı doz sorusu, teşhis isteği, Türkçe karakter olmadan yazım, olağan sohbet (yanlış pozitif kontrolü).
+
+## 7. Uygulamadaki karşılığı
+
+Aşağıdaki koç ekranında üç davranış görülür: kaynaklı (RAG) yanıt, doz sorusunun reddi ("Hekimimize bildirildi") ve "göğsümde baskı var" mesajına verilen kırmızı 112 kartı.
+
+<img src="../gorseller/06-hasta-koc.png" width="260" alt="Koç: kaynaklı yanıt, doz reddi, acil 112 kartı">
+
+*Şekil: Üç katmanlı guardrail'in hasta ekranındaki görünümü.*

@@ -32,6 +32,34 @@ Yetkisiz erişimde kaynak varlığını sızdırmamak için **404** döner.
 - Tool'lar yalnızca o oturumdaki hastanın verisine erişebilir (hasta kimliği sunucu tarafında bağlanır, model parametre olarak veremez).
 - Sağlayıcı tarafında veri saklama/eğitime kullanma kapalı API ayarları tercih edilir; README'de belirtilir.
 
+## Veri akışları ve güven sınırları
+
+```mermaid
+flowchart LR
+    subgraph T1["Güvenilmeyen bölge: kullanıcı cihazı"]
+        BR["Tarayıcı / PWA<br/>JWT'ye erişemez"]
+    end
+    subgraph T2["Uygulama sunucuları: güvenilen bölge"]
+        PX["Next.js proxy<br/>httpOnly çerez → Bearer"]
+        API["FastAPI<br/>rol kontrolü + guardrail"]
+        DB[("PostgreSQL + pgvector<br/>tüm sağlık verisi burada")]
+        RD[("Redis<br/>önbellek ve sayaç")]
+    end
+    subgraph T3["Üçüncü taraf servisler"]
+        LLM["Claude API<br/>ad ve e-posta YOK<br/>yalnızca takma kimlik ve tool özetleri"]
+        FDA["openFDA<br/>yalnızca ilaç etken madde adı"]
+        PUSH["Web push servisi<br/>sağlık verisi YOK<br/>genel hatırlatma metni"]
+    end
+    BR -- "HTTPS" --> PX
+    PX -- "Authorization Bearer" --> API
+    API <--> DB
+    API <--> RD
+    API -- "özet sayılar, mesaj" --> LLM
+    API -- "ilaç adı" --> FDA
+    API -- "bildirim yükü" --> PUSH
+    PUSH -.-> BR
+```
+
 ## 4. Teknik önlemler
 
 - Şifreler bcrypt ile hash'lenir; JWT kısa ömürlü (60 dk).

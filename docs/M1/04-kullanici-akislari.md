@@ -49,3 +49,71 @@ flowchart TD
 ## D. Bakım veren
 
 Hasta, ayarlardan e-posta ile bakım veren ekler → bakım veren hesabıyla giriş yapar → bağlı hastanın bugün ekranını, grafiklerini ve uyarılarını **salt okunur** görür.
+
+## E. Acil belirti akışı
+
+```mermaid
+flowchart TD
+    A["Hasta: göğsümde baskı var"] --> B{"Katman 1: acil belirti mi?"}
+    B -- "evet" --> C["LLM ÇAĞRILMAZ"]
+    C --> D["Kırmızı acil kartı + 112'yi ara düğmesi"]
+    C --> E["Kritik alert: hekim paneline düşer"]
+    D --> F["Hasta 112'yi arar / acil servise gider"]
+    E --> G["Hekim hastayla iletişime geçer"]
+    G --> H["Uyarıyı okundu işaretler"]
+    B -- "hayır" --> I["Normal koç akışı"]
+```
+
+## F. Hekim — triyaj akışı
+
+```mermaid
+flowchart TD
+    A["Hekim girişi"] --> B["Hasta listesi"]
+    B --> C{"Açık kritik uyarı var mı?"}
+    C -- "evet" --> D["Liste başında: önce bakılır"]
+    C -- "hayır" --> E{"Uyum bandı"}
+    E -- "düşük" --> F["Yukarıda: yakından izle"]
+    E -- "orta / iyi" --> G["Rutin sıra"]
+    D --> H["Hasta detayı: eğriler, doz takvimi, uyarılar"]
+    F --> H
+    G --> H
+    H --> I["Uyarıyı okundu işaretle"]
+```
+
+## G. Bakım veren — akış
+
+```mermaid
+flowchart TD
+    A["Hasta ayarlardan bakım veren ekler"] --> B["Bakım veren hesabıyla giriş"]
+    B --> C["Bağlı hastanın bugün ekranı"]
+    C --> D["Grafikler ve uyarılar"]
+    D --> E{"Düzenleme denemesi?"}
+    E -- "evet" --> F["Reddedilir: salt okunur"]
+    E -- "hayır" --> C
+```
+
+## Uygulamadaki karşılığı
+
+Yukarıdaki akışlar M3-M5'te uçtan uca gerçekleştirilmiştir (sentetik veriyle).
+
+**Hasta — günlük akış (A), koç sohbeti (B) ve acil belirti (E)**
+
+<table>
+<tr>
+<td align="center"><img src="../gorseller/02-hasta-bugun.png" width="260" alt="Bugün"><br><sub>Bugün: doz kartları</sub></td>
+<td align="center"><img src="../gorseller/03-hasta-olcum.png" width="260" alt="Ölçüm"><br><sub>Ölçüm: eşik dışı uyarı ve grafikler</sub></td>
+<td align="center"><img src="../gorseller/06-hasta-koc.png" width="260" alt="Koç"><br><sub>Koç: kaynaklı yanıt, doz reddi, 112 kartı</sub></td>
+</tr>
+</table>
+
+**Hekim — haftalık inceleme (C) ve triyaj (F)**
+
+![Hekim hasta listesi](../gorseller/07-hekim-hasta-listesi.png)
+
+![Hekim hasta detayı](../gorseller/08-hekim-hasta-detay.png)
+
+![Hekim uyarılar](../gorseller/09-hekim-uyarilar.png)
+
+**Bakım veren (D, G)**
+
+<img src="../gorseller/10-yakin-hastalar.png" width="260" alt="Yakın hasta listesi">

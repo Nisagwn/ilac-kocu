@@ -14,6 +14,9 @@ erDiagram
     patients ||--o{ measurements : ""
     patients ||--o{ coach_messages : ""
     patients ||--o{ alerts : ""
+    users ||--o{ push_subscriptions : "tarayıcı aboneliği"
+    medication_schedules ||--o{ reminder_logs : "gönderilen hatırlatma"
+    patients ||--o{ llm_usage : "LLM çağrı kaydı (silinince NULL)"
 
     users {
         int id PK
@@ -94,6 +97,20 @@ erDiagram
         datetime created_at
         datetime acknowledged_at
     }
+    push_subscriptions {
+        int id PK
+        int user_id FK
+        text endpoint UK
+        string p256dh
+        string auth
+        datetime created_at
+    }
+    reminder_logs {
+        int id PK
+        int schedule_id FK
+        date scheduled_date
+        datetime sent_at
+    }
     education_contents {
         int id PK
         string title
@@ -101,8 +118,31 @@ erDiagram
         string source_name
         string source_url
         string tags
-        vector embedding "pgvector (M4)"
+        string kind "curated|openfda"
+        string drug_key UK "openfda: etken madde"
+        bool reviewed "klinisyen gözden geçirmesi"
+        vector embedding "pgvector vector(384), HNSW cosine"
+        string embedding_model
+        datetime created_at
+    }
+    llm_usage {
+        int id PK
+        int patient_id FK "nullable, ON DELETE SET NULL"
+        string purpose "coach|summary"
+        string model
+        int input_tokens
+        int output_tokens
+        int cache_read_tokens
+        int cache_write_tokens
+        float cost_usd
+        datetime created_at
     }
 ```
 
 `dose_logs` üzerinde `(schedule_id, scheduled_date)` tekil kısıtı vardır: bir planlı doz için gün başına tek kayıt.
+
+`reminder_logs` üzerinde `(schedule_id, scheduled_date)` tekil kısıtı vardır: bir planlı doz için gün başına en fazla bir web push hatırlatması. `push_subscriptions.endpoint` tekildir (aynı tarayıcı yeniden abone olursa kayıt güncellenir); push servisi 404/410 dönerse abonelik silinir.
+
+`llm_usage` her Claude çağrısının (koç ve haftalık özet anlatısı) token ve tahmini USD maliyetini tutar (migration `0004_llm_usage`); mesaj içeriği saklanmaz. Günlük hasta isteği/token limiti ve aylık USD bütçesi bu tablodan hesaplanır (Redis kullanılmaz). Hasta silinirse `patient_id` NULL olur, kayıt anonim toplam olarak kalır.
+
+`education_contents` RAG korpusudur (migration `0003_rag`): `kind='curated'` satırlar `backend/app/data/education.yaml` dosyasından seed ile başlığa göre upsert edilir; `kind='openfda'` satırlar openFDA etiketinden üretilir ve `drug_key` (etken madde) tekildir. `embedding` PostgreSQL'de pgvector `vector(384)` (HNSW, `vector_cosine_ops`), SQLite'ta (testler) JSON'dur; `embedding_model` farklıysa satır tembel olarak yeniden embed edilir.

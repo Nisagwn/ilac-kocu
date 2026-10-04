@@ -82,3 +82,18 @@ Hastanın ilaç planını, kan şekeri/tansiyon ölçümlerini ve günlük notla
 | M3 | 11 Ara 2026 | Hasta günlük akışı ve hekim dashboard'u uçtan uca, PWA + web push, prototip koç |
 | M4 | 1 Oca 2027 | Tool-use koç, RAG, 40 senaryoluk guardrail seti, maliyet limiti, haftalık özet |
 | M5 | 17 Oca 2027 | Final rapor (etik/güvenlik, sınırlılıklar), demo videosu, kurulum talimatı |
+
+## 8. Gerçekleşen sistem
+
+M1'de önerilen platform M5 itibarıyla çalışır durumdadır. Hasta ekranları mobil, hekim ekranı masaüstü içindir (sentetik demo verisi).
+
+<table>
+<tr>
+<td align="center"><img src="../gorseller/02-hasta-bugun.png" width="260" alt="Hasta: Bugün"><br><sub>Hasta: Bugün</sub></td>
+<td align="center"><img src="../gorseller/06-hasta-koc.png" width="260" alt="Hasta: Koç"><br><sub>Hasta: Koç</sub></td>
+</tr>
+</table>
+
+**Hekim paneli: hasta listesi (masaüstü)**
+
+![Hekim hasta listesi](../gorseller/07-hekim-hasta-listesi.png)
