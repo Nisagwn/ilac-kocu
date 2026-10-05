@@ -136,7 +136,7 @@ def test_coach_llm_metrics_fallback_and_budget(db, pat):
     before_fb = sample("llm_request_duration_seconds_count", purpose="coach", model=model, outcome="fallback")
     before_fb_action = sample("coach_guardrail_actions_total", action="llm_fallback")
     provider, _ = provider_with([RuntimeError("boom")])
-    reply = handle_message(db, pat, "Merhaba", provider=provider)
+    reply = handle_message(db, pat, "bu hafta nasılım", provider=provider)
     db.commit()
     assert reply.guardrail_action == "llm_fallback"
     assert sample("llm_request_duration_seconds_count", purpose="coach", model=model,
@@ -145,7 +145,7 @@ def test_coach_llm_metrics_fallback_and_budget(db, pat):
 
     before_b = sample("llm_request_duration_seconds_count", purpose="coach", model=model, outcome="budget_exceeded")
     provider, client = provider_with([], llm_monthly_budget_usd=0.0)
-    reply = handle_message(db, pat, "Merhaba", provider=provider)
+    reply = handle_message(db, pat, "bu hafta nasılım", provider=provider)
     assert reply.guardrail_action == "budget_exceeded" and client.calls == []
     assert sample("llm_request_duration_seconds_count", purpose="coach", model=model,
                   outcome="budget_exceeded") == before_b + 1

@@ -22,7 +22,8 @@ from sqlalchemy.orm import Session
 from app.config import Settings, get_settings
 from app.models import CoachMessage, Patient, RiskLevel, Sender
 from app.observability import observe_llm
-from app.services.coach import WHO_SOURCE, CoachReply, RuleBasedCoach, Source
+from app.services import guardrails as gr
+from app.services.coach import WHO_SOURCE, CoachReply, RuleBasedCoach, Source, _is_small_talk
 from app.services.llm import patient_data
 from app.services.llm.budget import UsageTotals, check_budget, record_usage
 from app.services.llm.client import LlmError, assistant_content_for_replay, create_message, get_client, text_of
@@ -31,6 +32,7 @@ logger = logging.getLogger(__name__)
 
 PURPOSE = "coach"
 WHO_SOURCE_ID = 0
+FALLBACK_NOTE = "\n\n(Akıllı koç şu an yoğun olduğu için bu yanıtı temel koç hazırladı.)"
 BUDGET_NOTE = (
     "\n\n(Not: Akıllı koçun günlük kullanım sınırına ulaşıldı; bu yanıt temel koç tarafından hazırlandı.)"
 )
@@ -65,6 +67,8 @@ ilaç kutusu, ölçümleri düzenli kaydetmek. Kaçırılan dozlar belirli bir g
 verirsin.
 - Şu durumlarda "hekiminle konuş" der ve escalate_to_clinician=true döndürürsün: uyum %50'nin altındaysa, ölçümlerde \
 tekrarlayan eşik dışı değerler varsa, yan etki ya da yeni bir şikâyet bildirilirse, hasta ilaç değişikliği isterse.
+- İlaçla ilgili uyarıda her fiili ayrı ayrı olumsuz yazarsın: "ilacı kendi başına bırakma, dozunu değiştirme \
+ve atlama". "ya da atla", "azalt", "artır" gibi olumlu emir kipini ilaç için asla kullanmazsın.
 - Ölçüm değerlerini birim yazmadan verirsin (ör. "açlık şekerin ortalama 142", "tansiyonun ortalama 135/85"). "mg", "ml", "tablet" gibi birimleri ve ilaç dozlarını yazmazsın; güvenlik filtresi bunları doz önerisi sayar.
 - Ton: "sen" diliyle, sıcak, yargılamayan ve kısa. message en fazla 120 kelime. Başlık, tablo veya madde işareti \
 kullanmazsın.
@@ -253,6 +257,9 @@ class ClaudeCoachProvider:
         return self._client
 
     def reply(self, db: Session, patient: Patient, message: str) -> CoachReply:
+        if _is_small_talk(message):
+            # Selam/teşekkür gibi mesajlar LLM'e gitmez: anında yanıt, kota ve maliyet harcanmaz
+            return self.fallback.reply(db, patient, message)
         with observe_llm(PURPOSE, self.settings.model_name) as obs:
             decision = check_budget(db, patient.id, PURPOSE, self.settings)
             if not decision.allowed:
@@ -264,15 +271,52 @@ class ClaudeCoachProvider:
 
             totals = UsageTotals(model=self.settings.model_name)
             try:
-                return self._run(db, patient, message, totals)
+                reply = self._run(db, patient, message, totals)
+                return self._repair_if_blocked(reply, totals)
             except Exception as exc:
                 logger.warning("LLM koç başarısız (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
                 obs.outcome = "fallback"
                 base = self.fallback.reply(db, patient, message)
-                return base.model_copy(update={"guardrail_action": "llm_fallback"})
+                return base.model_copy(update={"message": base.message + FALLBACK_NOTE,
+                                               "guardrail_action": "llm_fallback"})
             finally:
                 obs.model = totals.model
                 record_usage(db, patient.id, PURPOSE, totals)
+
+    def _repair_if_blocked(self, reply: CoachReply, totals: UsageTotals) -> CoachReply:
+        """Taslak çıktı filtresine takılırsa modelden BİR KEZ yeniden yazmasını ister.
+
+        Filtre gevşetilmez: düzeltilmiş metin de handle_message'da aynı deterministik filtreden geçer;
+        yine takılırsa hastaya güvenli ret yanıtı gider. Kaynaklar ve risk düzeyi ilk taslaktan korunur."""
+        check = gr.check_output(reply.message)
+        if check.allowed:
+            return reply
+        prompt = (
+            "Aşağıdaki taslak yanıtın güvenlik filtresine takıldı: "
+            f"\"{check.matched}\" ifadesi ilaç dozu ya da kullanımı hakkında yönlendirme gibi okunabiliyor. "
+            "Aynı anlamı koruyarak yeniden yaz: ilaçla ilgili her fiili açıkça olumsuz kullan "
+            "(ör. \"bırakma, dozunu değiştirme ve atlama\"), doz, miktar ya da birim yazma, kararın hekime ait "
+            "olduğunu söyle. Yalnızca istenen JSON şemasında yanıt ver.\n\nTaslak:\n" + reply.message
+        )
+        try:
+            resp = create_message(
+                self.client, self.settings,
+                system=[{"type": "text", "text": COACH_SYSTEM_PROMPT, "cache_control": {"type": "ephemeral"}}],
+                messages=[{"role": "user", "content": prompt}],
+                output_config={"format": {"type": "json_schema", "schema": COACH_OUTPUT_SCHEMA}},
+            )
+        except Exception as exc:  # düzeltme başarısızsa taslak filtreye bırakılır (güvenli ret yanıtı)
+            logger.info("Taslak düzeltme çağrısı başarısız (%s)", type(exc).__name__)
+            return reply
+        totals.add(resp)
+        try:
+            text = text_of(resp.content)
+            start, end = text.find("{"), text.rfind("}")
+            fixed = LlmCoachOutput.model_validate_json(text[start:end + 1]).message.strip()
+        except (ValidationError, ValueError):
+            return reply
+        logger.info("Çıktı filtresine takılan taslak bir kez yeniden yazıldı")
+        return reply.model_copy(update={"message": fixed}) if fixed else reply
 
     def _run(self, db: Session, patient: Patient, message: str, totals: UsageTotals) -> CoachReply:
         s = self.settings
@@ -329,8 +373,15 @@ class ClaudeCoachProvider:
         text = text_of(resp.content)
         try:
             out = LlmCoachOutput.model_validate_json(text)
-        except ValidationError as exc:
-            raise LlmError("şema dışı çıktı") from exc
+        except ValidationError:
+            # Bazı modeller JSON'u kod bloğu ya da ek metinle sarar: ilk {...} bloğunu dene
+            start, end = text.find("{"), text.rfind("}")
+            try:
+                out = LlmCoachOutput.model_validate_json(text[start:end + 1]) if 0 <= start < end else None
+            except ValidationError:
+                out = None
+            if out is None:
+                raise LlmError("şema dışı çıktı") from None
         if not out.message.strip():
             raise LlmError("boş mesaj")
         return CoachReply(

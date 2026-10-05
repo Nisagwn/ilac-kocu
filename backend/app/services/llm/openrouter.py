@@ -30,9 +30,10 @@ _STOP_REASONS = {
 }
 
 
-# Ücretsiz modellerde dakikalık istek sınırı (429) sık görülür: kısa beklemeyle yeniden denenir
-RATE_LIMIT_RETRIES = 2
-RATE_LIMIT_MAX_WAIT = 20.0  # saniye; Retry-After daha uzunsa beklenmez, kural tabanlı koça düşülür
+# Ücretsiz modeller paylaşılan sağlayıcıda aralıklı olarak kısılır ("rate-limited upstream", 429).
+# Koç kuyrukta çalıştığı için beklemek kabul edilebilir: 5, 10, 20 sn bekleyerek 3 kez yeniden denenir.
+RATE_LIMIT_RETRIES = 3
+RATE_LIMIT_MAX_WAIT = 30.0  # saniye; Retry-After daha uzunsa beklenmez, kural tabanlı koça düşülür
 
 
 class OpenRouterError(RuntimeError):
@@ -43,7 +44,7 @@ def _retry_after(resp: httpx.Response, attempt: int) -> float:
     try:
         return float(resp.headers.get("retry-after", ""))
     except ValueError:
-        return 5.0 * (attempt + 1)
+        return 5.0 * (2 ** attempt)
 
 
 def _text_of_blocks(content: Any) -> str:

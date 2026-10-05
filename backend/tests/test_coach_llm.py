@@ -281,7 +281,8 @@ def test_provider_exception_falls_back_to_rule_based(db, pat, error):
     provider, _ = provider_with([response([tool_use("t1", "get_adherence", {"days": 7})], stop="tool_use"), error])
     reply = handle_message(db, p, "nasılım", provider=provider)
     expected = RuleBasedCoach().reply(db, p, "nasılım")
-    assert reply.guardrail_action == "llm_fallback" and reply.message == expected.message
+    assert reply.guardrail_action == "llm_fallback" and reply.message.startswith(expected.message)
+    assert "temel koç" in reply.message  # yedeğe düşüldüğü hastaya açıkça söylenir
     assert db.query(LlmUsage).one().input_tokens == 1000  # başarısız istekten önceki tur da kaydedilir
 
 
@@ -337,7 +338,7 @@ def test_no_server_fallbacks_uses_plain_messages_endpoint(db, pat):
     client = FakeClient([final()])
     client.beta = None  # beta yolu kullanılırsa test patlar
     provider = ClaudeCoachProvider(client=client, settings=llm_settings(llm_server_fallbacks=False, llm_effort=None))
-    handle_message(db, p, "merhaba", provider=provider)
+    handle_message(db, p, "bu hafta nasılım", provider=provider)
     call = client.calls[0]
     assert "fallbacks" not in call and "effort" not in call["output_config"]
 
@@ -348,7 +349,7 @@ def test_chat_endpoint_uses_provider_dependency(client, db, patient):
     _, h = patient
     fake = FakeClient([final("Merhaba! Bugün ilacını aldın mı?")])
     app.dependency_overrides[get_coach_provider] = lambda: ClaudeCoachProvider(client=fake, settings=llm_settings())
-    r = client.post("/coach/chat", headers=h, json={"message": "merhaba"})
+    r = client.post("/coach/chat", headers=h, json={"message": "bu hafta nasılım"})
     assert r.status_code == 200 and r.json()["message"] == "Merhaba! Bugün ilacını aldın mı?"
     assert len(fake.calls) == 1
 
@@ -398,3 +399,32 @@ def test_current_message_sent_exactly_once(db, pat, already_saved):
     assert _occurrences(msgs, "bugün aldım") == 1
     assert [m["role"] for m in msgs] == ["user", "assistant", "user"]
     assert msgs[-1]["content"][-1]["text"] == "bugün aldım"  # bağlam bloğuyla birlikte son turda
+
+
+# ---------------- Çıktı filtresi düzeltme turu ve selamlaşma ----------------
+def test_blocked_draft_is_repaired_once(db, pat):
+    p, _ = pat
+    add_plan(db, p.id)
+    bad = "İlacı kendin bırakma, dozu değiştirme ya da atla; karar hekimindir."
+    good = "İlacı kendi başına bırakma, dozunu değiştirme ve atlama; karar hekimine aittir."
+    provider, fake = provider_with([final(message=bad), final(message=good)])
+    reply = handle_message(db, p, "metformin midemi bulandırıyor", provider=provider)
+    assert reply.message == good and reply.guardrail_action is None
+    assert "ya da atla" in fake.calls[1]["messages"][0]["content"]  # takılan ifade modele bildirildi
+
+
+def test_repair_still_blocked_returns_safe_reply(db, pat):
+    p, _ = pat
+    add_plan(db, p.id)
+    bad = "Dozunu 1000 mg'a çıkar."
+    provider, _ = provider_with([final(message=bad), final(message=bad)])
+    reply = handle_message(db, p, "midem bulanıyor", provider=provider)
+    assert reply.guardrail_action and reply.guardrail_action.startswith("blocked_output")
+
+
+def test_small_talk_skips_llm(db, pat):
+    p, _ = pat
+    add_plan(db, p.id)
+    provider, fake = provider_with([])
+    reply = handle_message(db, p, "Selam", provider=provider)
+    assert reply.message.startswith("Merhaba") and fake.calls == []

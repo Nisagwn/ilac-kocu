@@ -105,14 +105,32 @@ class RuleBasedCoach:
     """
 
     def reply(self, db: Session, patient: Patient, message: str) -> CoachReply:
-        reply = self._adherence_reply(db, patient)
+        if _is_small_talk(message):
+            return self._greeting(db, patient)
         hits = search_education(db, message, k=1)
         if hits:
+            # Soruyla ilgili içerik öne; uyum durumu tek cümle (her mesajda aynı paragrafı tekrarlamamak için)
             hit = hits[0]
-            first_sentence = hit.body.split(". ")[0].rstrip(".") + "."
-            reply.message += f" İlgili bilgi — {hit.title}: {first_sentence}"
-            reply.sources.insert(0, Source(title=f"{hit.title} ({hit.source_name})", url=hit.source_url))
-        return reply
+            sentences = [x.strip().rstrip(".") for x in hit.body.split(". ") if x.strip()]
+            status = self._status_line(db, patient)
+            reply = self._adherence_reply(db, patient)
+            reply.message = f"İlgili bilgi — {hit.title}: {'. '.join(sentences[:2])}." + (f" {status}" if status else "")
+            reply.sources = [Source(title=f"{hit.title} ({hit.source_name})", url=hit.source_url)]
+            return reply
+        return self._adherence_reply(db, patient)
+
+    def _greeting(self, db: Session, patient: Patient) -> CoachReply:
+        status = self._status_line(db, patient)
+        text = ("Merhaba! Ben ilaç uyumu koçunum. İlaçlarını, ölçümlerini ya da günlük alışkanlıklarını "
+                "sorabilirsin." + (f" {status}" if status else ""))
+        return CoachReply(message=text)
+
+    @staticmethod
+    def _status_line(db: Session, patient: Patient) -> str:
+        adh = get_adherence(db, patient.id, days=7)
+        if adh.score is None:
+            return ""
+        return f"Son 7 günde {adh.planned} dozun {adh.taken} tanesini almışsın (%{adh.percent})."
 
     def _adherence_reply(self, db: Session, patient: Patient) -> CoachReply:
         adh = get_adherence(db, patient.id, days=7)
@@ -136,6 +154,17 @@ class RuleBasedCoach:
         return CoachReply(message=text, risk_level=risk, escalate_to_clinician=adh.score < 0.5, sources=[WHO_SOURCE])
 
 
+_SMALL_TALK = {
+    "selam", "merhaba", "mrb", "slm", "sa", "selamun aleykum", "gunaydin", "iyi aksamlar", "iyi geceler",
+    "nasilsin", "naber", "tesekkurler", "tesekkur ederim", "sagol", "sag ol", "eyvallah", "tamam", "ok",
+}
+
+
+def _is_small_talk(message: str) -> bool:
+    text = gr.normalize(message).strip(" .!?")
+    return text in _SMALL_TALK or (len(text.split()) <= 3 and text.startswith(("selam", "merhaba")))
+
+
 def get_coach_provider() -> CoachProvider:
     """FastAPI bağımlılığı: yapılandırmaya göre koç sağlayıcısı (testlerde override edilebilir)."""
     if get_settings().llm_enabled:
@@ -150,6 +179,21 @@ def get_coach_provider() -> CoachProvider:
 
 def _alert(db: Session, patient_id: int, severity: Severity, kind: str, message: str) -> None:
     db.add(Alert(patient_id=patient_id, severity=severity, kind=kind, message=message))
+
+
+ESCALATION_DEDUP = timedelta(hours=24)
+
+
+def _open_escalation_exists(db: Session, patient_id: int) -> bool:
+    """Son 24 saatte açık (onaylanmamış) bir koç yönlendirme uyarısı var mı? Varsa yenisi açılmaz:
+    her mesajda uyarı açmak hekim panelinde uyarı yorgunluğu yaratır. Acil uyarılar bu kurala tabi değildir."""
+    since = datetime.now(UTC) - ESCALATION_DEDUP
+    return db.scalar(
+        select(Alert.id).where(
+            Alert.patient_id == patient_id, Alert.kind == "coach_escalation",
+            Alert.acknowledged_at.is_(None), Alert.created_at >= since,
+        ).limit(1)
+    ) is not None
 
 
 def save_patient_message(db: Session, patient: Patient, message: str) -> None:
@@ -218,7 +262,11 @@ def run_provider_stage(
     elif reply.risk_level == RiskLevel.emergency:
         _alert(db, patient.id, Severity.critical, "coach_emergency", "Koç yanıtı acil yönlendirme içeriyor.")
     elif reply.escalate_to_clinician:
-        _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi.")
+        if _open_escalation_exists(db, patient.id):
+            # Hekim zaten bilgilendirildi; "Hekiminize bildirildi" notu yalnızca yeni uyarıda gösterilir
+            reply = reply.model_copy(update={"escalate_to_clinician": False})
+        else:
+            _alert(db, patient.id, Severity.warning, "coach_escalation", "Koç hekime yönlendirme önerdi.")
     _save_coach_reply(db, patient, reply)
     if commit:
         db.commit()

@@ -165,9 +165,11 @@ def test_rate_limit_429_is_retried_then_succeeds():
 def test_rate_limit_gives_up_after_retries():
     from app.services.llm.openrouter import OpenRouterError
 
-    client = mock_client([429, 429, 429], [], sleeps=[])
+    sleeps: list = []
+    client = mock_client([429, 429, 429, 429], [], sleeps=sleeps)
     with pytest.raises(OpenRouterError, match="429"):
         client.messages.create(messages=[{"role": "user", "content": "selam"}])
+    assert sleeps == [5.0, 10.0, 20.0]  # üstel bekleme, 3 yeniden deneme
 
 
 def test_free_models_are_priced_zero():

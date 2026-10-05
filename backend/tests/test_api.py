@@ -280,3 +280,33 @@ def test_rule_based_coach_cites_relevant_education(client, patient, db):
     r = client.post("/coach/chat", json={"message": "Akşam ilacımı sürekli unutuyorum"}, headers=h).json()
     assert r["sources"][0]["title"].startswith("Akşam dozlarını unutmamak")
     assert "İlgili bilgi" in r["message"]
+
+
+
+def test_rule_based_coach_greets_small_talk(client, patient):
+    pid, h = patient[0]["patient_id"], patient[1]
+    add_med(client, pid, h)
+    r = client.post("/coach/chat", json={"message": "Selam!"}, headers=h).json()
+    assert r["message"].startswith("Merhaba") and r["escalate_to_clinician"] is False
+
+
+def test_coach_escalation_alert_not_repeated_within_24h(patient, db):
+    """Her mesajda hekime yeni uyarı açılmamalı (uyarı yorgunluğu); onaylanınca yenisi açılabilir."""
+    from datetime import UTC, datetime
+
+    from app.models import Alert, Patient
+    from app.services.coach import CoachReply, run_provider_stage
+
+    class AlwaysEscalate:
+        def reply(self, db, patient, message):
+            return CoachReply(message="Hekiminle konuşmanı öneririm.", escalate_to_clinician=True)
+
+    pat = db.get(Patient, patient[0]["patient_id"])
+    r1 = run_provider_stage(db, pat, "a", AlwaysEscalate())
+    r2 = run_provider_stage(db, pat, "b", AlwaysEscalate())
+    alerts = db.query(Alert).filter(Alert.patient_id == pat.id, Alert.kind == "coach_escalation").all()
+    assert r1.escalate_to_clinician is True and r2.escalate_to_clinician is False and len(alerts) == 1
+
+    alerts[0].acknowledged_at = datetime.now(UTC)  # hekim okudu -> yeni yönlendirme yeniden uyarı açar
+    db.commit()
+    assert run_provider_stage(db, pat, "c", AlwaysEscalate()).escalate_to_clinician is True
