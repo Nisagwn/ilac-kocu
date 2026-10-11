@@ -35,7 +35,7 @@ python --version    # 3.12.x (Windows'ta `py --version` da olur)
 ### A1. Depoyu alın
 
 ```bash
-git clone <depo-adresi> ilac-kocu
+git clone https://github.com/Nisagwn/ilac-kocu.git ilac-kocu
 cd ilac-kocu
 ```
 

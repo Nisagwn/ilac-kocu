@@ -1,3 +1,4 @@
+import logging
 from contextlib import asynccontextmanager
 
 from fastapi import FastAPI
@@ -21,10 +22,19 @@ from app.routers import (
 from app.services.reminders import start_scheduler
 
 settings = get_settings()
+logger = logging.getLogger(__name__)
+
+# Depo herkese açık: bu değerlerle imzalanan token'lar herkesçe üretilebilir
+_PLACEHOLDER_JWT_SECRETS = {
+    "dev-secret-change-me",
+    "buraya-en-az-32-karakterlik-rastgele-bir-anahtar-yazin",
+}
 
 
 @asynccontextmanager
 async def lifespan(_: FastAPI):
+    if settings.jwt_secret in _PLACEHOLDER_JWT_SECRETS or len(settings.jwt_secret) < 32:
+        logger.warning("JWT_SECRET varsayılan ya da 32 karakterden kısa; yalnızca yerel demo için kullanın.")
     # Doz hatırlatma zamanlayıcısı kuyruk işçisinde (python -m app.worker) çalışır; API birden fazla
     # worker ile koşabildiği için burada başlatılmaz (çift bildirim olur). Tek süreçli geliştirme için
     # RUN_SCHEDULER_IN_API=true. Her durumda REMINDERS_ENABLED ve VAPID anahtarları gerekir (testlerde asla).
