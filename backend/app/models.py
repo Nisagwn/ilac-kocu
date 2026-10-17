@@ -265,7 +265,12 @@ class EducationContent(Base):
     # M4 RAG (migration 0003_rag): PostgreSQL'de pgvector vector(384), SQLite'ta JSON
     kind: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
     drug_key: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)  # openfda: etken madde
-    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # klinisyen gözden geçirmesi yapıldı mı
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # onaylandı mı (review_status == approved)
+    # Hekim onayı (migration 0010_education_review): pending | approved | rejected.
+    # rejected içerik RAG aramasına girmez; politika: docs/egitim-icerigi-onayi.md
+    review_status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    reviewed_by: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector(EMBEDDING_DIM), deferred=True)
     embedding_model: Mapped[str | None] = mapped_column(String(80))
 

@@ -29,6 +29,19 @@ VECTOR_WEIGHT = 0.7
 KEYWORD_WEIGHT = 0.3
 PG_CANDIDATES = 40
 
+# Eğitim içeriği onay politikası (docs/egitim-icerigi-onayi.md):
+# - Hekimin reddettiği (review_status='rejected') içerik aramaya hiç girmez.
+# - Onay bekleyen otomatik (openFDA) içerik kullanılabilir ama başlığında işaretlenir; böylece hem kural
+#   tabanlı hem LLM koçun gösterdiği kaynakta "hekim onayı bekliyor" notu görünür.
+REJECTED = "rejected"
+PENDING_REVIEW_NOTE = "hekim onayı bekliyor"
+
+
+def _hit_title(row: EducationContent) -> str:
+    if row.kind == "openfda" and (row.review_status or "pending") == "pending":
+        return f"{row.title} ({PENDING_REVIEW_NOTE})"
+    return row.title
+
 
 def _doc_text(row: EducationContent) -> str:
     return document_text(row.title, row.body, row.tags)
@@ -69,7 +82,8 @@ def _doc_keys(text: str) -> frozenset[str]:
 def _pg_candidates(db: Session, qvec: list[float], model_id: str, tags: set[str]) -> list[tuple[EducationContent, float]]:
     qparam = cast(bindparam("qv", qvec, type_=Vector(EMBEDDING_DIM)), Vector(EMBEDDING_DIM))
     dist = EducationContent.embedding.op("<=>", return_type=Float)(qparam)
-    stmt = select(EducationContent, dist.label("dist")).where(EducationContent.embedding_model == model_id)
+    stmt = select(EducationContent, dist.label("dist")).where(
+        EducationContent.embedding_model == model_id, EducationContent.review_status != REJECTED)
     if tags:
         stmt = stmt.where(or_(*[EducationContent.tags.ilike(f"%{t}%") for t in tags]))
     stmt = stmt.order_by(dist).limit(PG_CANDIDATES)
@@ -78,7 +92,7 @@ def _pg_candidates(db: Session, qvec: list[float], model_id: str, tags: set[str]
 
 def _py_candidates(db: Session, qvec: list[float], provider: EmbeddingProvider,
                    on_the_fly: bool) -> list[tuple[EducationContent, float]]:
-    stmt = select(EducationContent)
+    stmt = select(EducationContent).where(EducationContent.review_status != REJECTED)
     if not on_the_fly:
         stmt = stmt.options(undefer(EducationContent.embedding))
     rows = list(db.scalars(stmt))
@@ -120,6 +134,6 @@ def search(db: Session, query: str, k: int = 3, tags: list[str] | None = None) -
         overlap = len(qkeys & _doc_keys(_doc_text(row))) / len(qkeys) if qkeys else 0.0
         score = VECTOR_WEIGHT * max(cos, 0.0) + KEYWORD_WEIGHT * overlap
         if score >= min_score:
-            hits.append(EducationHit(row.id, row.title, row.body, row.source_name, row.source_url, round(score, 4)))
+            hits.append(EducationHit(row.id, _hit_title(row), row.body, row.source_name, row.source_url, round(score, 4)))
     hits.sort(key=lambda h: (-h.score, h.id))
     return hits[:k]

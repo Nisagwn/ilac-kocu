@@ -81,6 +81,9 @@ class PatientSummaryOut(BaseModel):
     open_alerts: int
     critical_alerts: int
     last_measurement_at: datetime | None
+    # Bu hafta vs geçen hafta uyum farkı (yüzde puan) ve yönü: up | down | flat; veri yoksa None
+    adherence_trend_delta: int | None = None
+    adherence_trend_direction: str | None = None
 
 
 # ---------- Medications ----------
@@ -271,3 +274,63 @@ class DrugSearchOut(BaseModel):
     pharm_class: str | None
     source: str  # tr_curated | openfda
     openfda_available: bool
+
+
+# ---------- Klinik içgörüler (hekim dashboard'u) ----------
+class AdherenceTrendOut(BaseModel):
+    current_start: date
+    current_end: date
+    previous_start: date
+    previous_end: date
+    current_score: float | None
+    previous_score: float | None
+    current_percent: int | None
+    previous_percent: int | None
+    delta_points: int | None
+    direction: str | None  # up | down | flat
+
+
+class TargetStatsOut(BaseModel):
+    count: int
+    in_target: int
+    in_target_ratio: float | None
+    avg: float | None
+    avg_diastolic: float | None = None
+
+
+class TargetWindowsOut(BaseModel):
+    target: str
+    window_30d: TargetStatsOut
+    window_7d: TargetStatsOut
+
+
+class SkipCategoryOut(BaseModel):
+    key: str
+    label: str
+    count: int
+    percent: int
+
+
+class SkipReasonsOut(BaseModel):
+    window_days: int
+    total: int
+    categories: list[SkipCategoryOut]
+
+
+class MeasurementFrequencyOut(BaseModel):
+    window_days: int
+    days_with_measurement: int
+    min_expected_days: int
+    low_data: bool
+
+
+class ClinicalInsightsOut(BaseModel):
+    """Hekim değerlendirmesi için veri özeti; teşhis/tedavi önerisi içermez."""
+
+    patient_id: int
+    as_of: date
+    adherence_trend: AdherenceTrendOut
+    targets: dict[MeasurementType, TargetWindowsOut]
+    skip_reasons: SkipReasonsOut
+    measurement_frequency: MeasurementFrequencyOut
+    disclaimer: str

@@ -3,7 +3,7 @@ from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
-from sqlalchemy import func, select
+from sqlalchemy import case, func, select
 
 from app.deps import DB, CurrentUser, get_own_patient, get_patient_for_read, get_patient_for_write, require_roles
 from app.models import AccessLog, Alert, Measurement, Patient, PatientCaregiver, Role, Severity, User
@@ -11,12 +11,15 @@ from app.schemas import (
     AddCaregiverIn,
     AdherenceOut,
     AssignClinicianIn,
+    ClinicalInsightsOut,
     PatientOut,
     PatientSummaryOut,
     PatientUpdate,
 )
+from app.services import clinical_insights
 from app.services import summary as summary_service
 from app.services.adherence import adherence_band
+from app.services.clinical_insights import adherence_overview
 from app.services.coach import get_adherence
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -41,22 +44,33 @@ def list_patients(db: DB, user: CurrentUser):
     else:
         patients = [get_own_patient(db, user)]
 
+    # Hasta sayısından bağımsız sabit sayıda sorgu (N+1 yok): uyum girdileri, uyarı ve son ölçüm toplu çekilir
+    ids = [p.id for p in patients]
+    overview = adherence_overview(db, ids)
+    alert_counts: dict[int, tuple[int, int]] = {}
+    last_measured: dict[int, datetime] = {}
+    if ids:
+        for pid, n_open, n_critical in db.execute(
+            select(Alert.patient_id, func.count(), func.sum(case((Alert.severity == Severity.critical, 1), else_=0)))
+            .where(Alert.patient_id.in_(ids), Alert.acknowledged_at.is_(None))
+            .group_by(Alert.patient_id)
+        ).all():
+            alert_counts[pid] = (n_open or 0, int(n_critical or 0))
+        last_measured = dict(db.execute(
+            select(Measurement.patient_id, func.max(Measurement.measured_at))
+            .where(Measurement.patient_id.in_(ids))
+            .group_by(Measurement.patient_id)
+        ).all())
+
     rows = []
     for p in patients:
-        a7 = get_adherence(db, p.id, 7).score
-        a30 = get_adherence(db, p.id, 30).score
-        open_alerts = db.scalar(
-            select(func.count()).select_from(Alert).where(Alert.patient_id == p.id, Alert.acknowledged_at.is_(None))
-        )
-        critical = db.scalar(
-            select(func.count()).select_from(Alert).where(
-                Alert.patient_id == p.id, Alert.acknowledged_at.is_(None), Alert.severity == Severity.critical
-            )
-        )
-        last_m = db.scalar(select(func.max(Measurement.measured_at)).where(Measurement.patient_id == p.id))
+        r7, r30, trend = overview[p.id]
+        open_alerts, critical = alert_counts.get(p.id, (0, 0))
         rows.append(PatientSummaryOut(
-            id=p.id, full_name=p.user.full_name, adherence_7d=a7, adherence_30d=a30, band=adherence_band(a7),
-            open_alerts=open_alerts or 0, critical_alerts=critical or 0, last_measurement_at=last_m,
+            id=p.id, full_name=p.user.full_name, adherence_7d=r7.score, adherence_30d=r30.score,
+            band=adherence_band(r7.score), open_alerts=open_alerts, critical_alerts=critical,
+            last_measurement_at=last_measured.get(p.id),
+            adherence_trend_delta=trend.delta_points, adherence_trend_direction=trend.direction,
         ))
     # Önce kritik uyarısı olanlar, sonra uyumu düşük olanlar
     rows.sort(key=lambda r: (-r.critical_alerts, r.adherence_7d if r.adherence_7d is not None else 2))
@@ -113,6 +127,15 @@ def update_patient(patient_id: int, data: PatientUpdate, db: DB, user: CurrentUs
         setattr(p, k, v)
     db.commit()
     return to_out(p)
+
+
+@router.get("/{patient_id}/insights", response_model=ClinicalInsightsOut)
+def patient_insights(patient_id: int, db: DB, user: CurrentUser):
+    """Hekim değerlendirmesi için klinik veri özeti (teşhis değildir): haftalık uyum eğilimi, hedefte kalma
+    oranları (30/7 gün), doz atlama nedenleri (30 gün) ve son 7 günde ölçüm sıklığı.
+    Erişim: hasta kendisi, atanmış hekim, bağlı bakım veren; aksi halde 404."""
+    get_patient_for_read(db, user, patient_id)
+    return clinical_insights.patient_insights(db, patient_id)
 
 
 @router.get("/{patient_id}/adherence", response_model=AdherenceOut)

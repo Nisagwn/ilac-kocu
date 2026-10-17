@@ -69,19 +69,26 @@ def seed_education(db: Session, path: Path = EDUCATION_YAML) -> tuple[int, int]:
         if title not in titles:
             db.delete(row)
     for it in items:
+        yaml_reviewed = bool(it.get("reviewed", False))
         values = {
             "body": it["body"].strip(),
             "source_name": it["source_name"],
             "source_url": it.get("source_url"),
             "tags": it.get("tags"),
-            "reviewed": bool(it.get("reviewed", False)),
         }
+        review = {"reviewed": yaml_reviewed, "review_status": "approved" if yaml_reviewed else "pending"}
         row = existing.get(it["title"])
         if row is None:
-            db.add(EducationContent(title=it["title"], kind="curated", **values))
+            db.add(EducationContent(title=it["title"], kind="curated", **values, **review))
             created += 1
-        elif any(getattr(row, k) != v for k, v in values.items()):
-            text_changed = (row.body, row.tags) != (values["body"], values["tags"])
+            continue
+        text_changed = (row.body, row.tags) != (values["body"], values["tags"])
+        if row.reviewed_by is not None and not text_changed:
+            review = {}  # hekimin onay/ret kararı YAML'daki varsayılandan önceliklidir
+        elif row.reviewed_by is not None:
+            review |= {"reviewed_by": None, "reviewed_at": None}  # karar eski metne aitti: yeniden onay
+        values |= review
+        if any(getattr(row, k) != v for k, v in values.items()):
             for k, v in values.items():
                 setattr(row, k, v)
             if text_changed:
