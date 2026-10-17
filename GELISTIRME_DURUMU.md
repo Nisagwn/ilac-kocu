@@ -34,11 +34,11 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [x] `tests/test_platform.py`
 
 ### C — Altyapı
-- [ ] Nginx reverse proxy + LB (`infra/nginx/`), api × 3, `X-Upstream` başlığı, güvenlik başlıkları, gzip, `limit_req`
-- [ ] Graceful shutdown (uvicorn + compose `stop_grace_period`), healthcheck'ler
-- [ ] Prometheus + Grafana (pano) + Jaeger, compose profile `observability`; `setup_tracing(app)` (OTel, env ile açılır)
-- [ ] k6 senaryoları (`infra/k6/`), `docs/yuk-testi.md` (1 vs 3 kopya, kopya durdurma)
-- [ ] `infra/README.md`
+- [x] Nginx reverse proxy + LB (`infra/nginx/`), api × 3, `X-Upstream` başlığı, güvenlik başlıkları, gzip, `limit_req`
+- [x] Graceful shutdown (uvicorn + compose `stop_grace_period`), healthcheck'ler
+- [x] Prometheus + Grafana (pano) + Jaeger, compose profile `observability`; `setup_tracing(app)` (OTel, env ile açılır)
+- [x] k6 senaryoları (`infra/k6/`), `docs/yuk-testi.md` (1 vs 3 kopya, kopya durdurma)
+- [x] `infra/README.md`
 
 ### D — Dayanıklılık, worker, yapay zekâ değerlendirmesi, CI
 - [x] Circuit breaker (`services/circuit_breaker.py`, Redis'te durum) — LLM'e uygulanır
@@ -69,10 +69,12 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 4. ~~openFDA çağrısını D'nin circuit breaker'ıyla sar~~ (D'de yapıldı).
 5. ~~Idempotency temizliğini lider işçi zamanlayıcısına bağla~~ (D'de yapıldı: `idempotency_purge` saatlik).
 5b. ~~CI'a Redis servisi + `REDIS_TEST_URL`~~ (D'de yapıldı; ayrıca `TEST_DATABASE_URL`).
-6. Tüm testler + ruff + frontend lint/build; `docker compose up --build` ile uçtan uca deneme (giriş, ilaç arama/ekleme, doz, koç, hekim paneli).
-7. Belgeler: `docs/er-diyagrami.md` güncelle (yeni tablolar: drug_catalog, idempotency_keys, weekly_summaries?, coach_jobs, refresh_tokens, access_logs), README'ye ER diyagramını göm, README "Durum" tablosu.
+6. ~~Uçtan uca deneme~~ yapıldı: Docker yığınında (api×3 + nginx + işçi) tarayıcıyla giriş, doz, katalogdan ilaç ekleme, koç (kuyruk + işçi), acil yanıt, hekim paneli + klinik özet, kritik uyarı, eğitim içeriği onayı.
+7. ~~Belgeler~~ yapıldı: ER diyagramı güncellendi ve README'ye gömüldü; README mimari/test/belge tabloları.
 
 ## Kalan (bu turun dışında)
+- `GET /v1/patients` (hekim listesi) hasta başına uyumu birkaç kez hesaplıyor; yük testinde istek başına ~75 ms CPU (docs/yuk-testi.md). Büyük listeler için önbellek / toplu hesaplama.
+- `docs/gorseller/12-mimari.png` eski mimariyi gösteriyor (nginx, kopyalar, lider işçi yok); README'deki mermaid şeması güncel.
 - Demo videosu (M5) — kullanıcı çekecek.
 - Final raporda "AI Tools Usage" bölümü — kullanıcı yazacak (`ilac-uyum-kocu/docs/ai-araclari-kullanimi.md` kaydından).
 - Gerçek LLM model karşılaştırması — ücretli API, kullanıcı onayıyla.
@@ -86,3 +88,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - 2026-10-17: **B bitti.** 529 backend testi geçti (gerçek Redis'le Lua testi dahil), ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0008_idempotency` upgrade/downgrade/upgrade denendi. Tarayıcıda: tüm trafik `/v1`'den, ikinci ziyarette 304, doz işaretlemede Idempotency-Key gidiyor, `/health/ready` Redis+DB+migration "ok". Koça mesaj genel istek sınırından muaf (acil yanıt asla engellenmez). Belge: `docs/M2/api-platform.md`.
 - 2026-10-17: **E bitti.** 560 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0009_education_review` upgrade/downgrade/upgrade ve temiz seed denendi (seed artık atlanan dozlara örnek neden yazar; ayrı rastgele üreteç, diğer demo sayıları değişmedi). Tarayıcıda: hasta listesinde eğilim okları, detayda Klinik özet kartı, `/hekim/egitim`'de onay/ret/geri al. Belge: `docs/M5/klinik-icgoruler.md`.
 - 2026-10-17: **D bitti.** 608 backend testi geçti (gerçek Redis + PostgreSQL ile, atlanan yok), ruff (app, tests, scripts) temiz. PostgreSQL'de `0010_weekly_summaries` upgrade/downgrade/upgrade. İki gerçek işçiyle lider devri denendi (A'ya SIGTERM → B 2 sn'de lider). Davranış değişiklikleri: `COACH_JOB_MAX_ATTEMPTS` 2 → 3 (spec), hekim artık push aboneliği açabilir (haftalık özet bildirimi; bakım veren hâlâ 403), zamanlayıcı `app/scheduler.py`'ye taşındı. Belge: `docs/M5/dayaniklilik.md`.
+- 2026-10-17: **C bitti — beş paketin hepsi tamam.** 611 backend testi geçti (gerçek Redis + PostgreSQL), ruff temiz; frontend lint/tsc/build temiz. Docker yığını bu ortamda gerçekten çalıştırıldı (registry mirror + vekil CA'sı yalnızca yerel derleme sarmalayıcısında; proje Dockerfile'ları değişmedi). Ölçümler `docs/yuk-testi.md`: 1 → 3 kopya verim 67 → 193 istek/sn, p95 945 → 296 ms; kopya durdurmada 902 istekte 0 (SIGTERM) / 1 (SIGKILL) hata; iki katmanlı istek sınırı doğrulandı. Bulgular üzerine: nginx 429'u JSON + Retry-After, `proxy_next_upstream_tries` 3, Grafana panosu sağlık kontrollerini hariç tutar.

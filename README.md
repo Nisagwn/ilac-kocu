@@ -26,6 +26,7 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | M3 — Arayüz ve dashboard (MVP) | 11 Ara 2026 | ✅ `frontend/` (Next.js PWA), web push + hatırlatma zamanlayıcısı, 102 backend testi |
 | M4 — Yapay zekâ bileşeni | 1 Oca 2027 | ✅ Claude tool-use koç, RAG (pgvector), maliyet limiti, 232 senaryoluk guardrail seti, 469 backend testi |
 | M5 — Final teslim | 17 Oca 2027 | ✅ rapor, kurulum, demo senaryosu (`docs/M5/`) — video kayıt bekliyor |
+| Geliştirme turu (`gelistirme` dalı) | 17 Eki 2026 | ✅ ilaç kataloğu, API platform katmanı (`/v1`), klinik içgörüler + eğitim onayı, dayanıklılık (devre kesici, DLQ, lider işçi), nginx + 3 kopya + gözlemlenebilirlik, yük testi; 611 backend testi ([`GELISTIRME_DURUMU.md`](GELISTIRME_DURUMU.md)) |
 
 ## Ekranlar
 
@@ -279,10 +280,11 @@ backend/tests/
 ├── test_platform.py          /v1, token bucket, Idempotency-Key, ETag, cursor sayfalama, sağlık uçları
 ├── test_clinical_insights.py klinik özet: eğilim, hedef aralıkta kalma, atlama nedenleri
 ├── test_education_review.py  eğitim içeriği hekim onayı, RAG'in reddedileni kullanmaması
-└── test_resilience.py        devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış haftalık özet
+├── test_resilience.py        devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış haftalık özet
+└── test_tracing.py           OpenTelemetry: varsayılan kapalı, span'lerde kimlik/sorgu/IP yok
 ```
 
-**Toplam 608 backend testi** geçer (parametrik senaryolar dahil; gerçek Redis/PostgreSQL ile hiçbiri atlanmaz); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live`; modelleri kalite setiyle karşılaştırmak için `python -m scripts.eval_llm_models --live --models ...` (API anahtarı gerekir, ücretli; sonuç [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md)).
+**Toplam 611 backend testi** geçer (parametrik senaryolar dahil; gerçek Redis/PostgreSQL ile hiçbiri atlanmaz); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live`; modelleri kalite setiyle karşılaştırmak için `python -m scripts.eval_llm_models --live --models ...` (API anahtarı gerekir, ücretli; sonuç [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md)).
 
 GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → koç kalite seti → diğer testler, Redis ve PostgreSQL servisleriyle → tek migration head kontrolü → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
 
@@ -313,6 +315,8 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → gua
 | [`docs/M5/demo-senaryosu.md`](docs/M5/demo-senaryosu.md) | Demo videosu senaryosu ve kayıt kontrol listesi |
 | [`docs/M5/etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md) | Değerlendirme ölçütü → kanıt eşlemesi |
 | [`docs/M5/klinik-icgoruler.md`](docs/M5/klinik-icgoruler.md) | Hekim klinik özeti ve eğitim içeriği onayı |
+| [`docs/yuk-testi.md`](docs/yuk-testi.md) | Yük testi: 1 ve 3 API kopyası, kopya durdurma, istek sınırı (ölçülmüş sonuçlar) |
+| [`infra/README.md`](infra/README.md) | nginx, kopyalar, düzgün kapanma, Prometheus/Grafana/Jaeger, k6 |
 | [`docs/M5/dayaniklilik.md`](docs/M5/dayaniklilik.md) | Devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış işler, yapay zekâ değerlendirmesi |
 | Demo videosu | <!-- KULLANICI: kayıttan sonra video bağlantısını buraya yazın --> *(henüz yüklenmedi)* |
 

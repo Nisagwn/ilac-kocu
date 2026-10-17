@@ -48,6 +48,15 @@ server {
     client_max_body_size 1m;
     access_log /dev/stdout api_json;
 
+    # nginx'in IP sınırı aşımı da API ile aynı biçimde yanıtlansın: JSON gövde + Retry-After
+    error_page 429 = @ip_rate_limited;
+    location @ip_rate_limited {
+        default_type application/json;
+        add_header Retry-After 1 always;
+        include /etc/nginx/snippets/security-headers.conf;
+        return 429 '{"detail":"Çok fazla istek gönderildi. Lütfen biraz sonra tekrar deneyin."}';
+    }
+
     location = /nginx-health {
         access_log off;
         default_type text/plain;

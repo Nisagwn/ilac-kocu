@@ -34,7 +34,7 @@ docker compose --profile loadtest run --rm k6 run /scripts/load.js
 ## nginx (`nginx/`)
 
 - **Yük dengeleme:** `least_conn`, `server api:8000 resolve`: Docker DNS'i "api" adını her kopyanın IP'sine çözer, kopya eklenip çıkınca 10 sn içinde güncellenir (nginx ≥ 1.27.3). Pasif sağlık kontrolü: 10 sn'de 3 hata → kopya 10 sn devre dışı.
-- **Hata aktarımı:** bağlantı hatası/zaman aşımı/502/503'te istek diğer kopyaya aktarılır (en çok 2 deneme). nginx POST/PATCH'i varsayılan olarak yeniden göndermez (çift kayıt olmaz); istemci `Idempotency-Key` ile güvenle yeniden deneyebilir.
+- **Hata aktarımı:** bağlantı hatası/zaman aşımı/502/503'te istek diğer kopyaya aktarılır (en çok 3 deneme). nginx POST/PATCH'i varsayılan olarak yeniden göndermez (çift kayıt olmaz); istemci `Idempotency-Key` ile güvenle yeniden deneyebilir.
 - **`X-Upstream`** yanıt başlığı yanıtı veren kopyanın adresini gösterir (yük dağılımı gözlemi, yük testi). Üretimde istenirse kaldırılabilir.
 - **Güvenlik başlıkları:** `X-Content-Type-Options`, `X-Frame-Options: DENY`, `Referrer-Policy: no-referrer`, `Permissions-Policy`, `Cross-Origin-Resource-Policy`; JSON uçlarında `Content-Security-Policy: default-src 'none'` (Swagger/ReDoc hariç, CDN script'i yükler). `server_tokens off`. HSTS yalnızca TLS sonlandıran bir vekilin arkasında açılmalı (yorum satırı).
 - **gzip:** 1 KB üzeri JSON/metin. Gzip'lenen yanıtta nginx API'nin ETag'ini zayıf (`W/`) yapar; API `If-None-Match` karşılaştırmasında `W/` önekini dikkate almaz, 304 çalışmaya devam eder.
