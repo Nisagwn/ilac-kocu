@@ -78,3 +78,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 
 ## Günlük
 - 2026-10-17: `gelistirme` dalı açıldı (474 test geçti). A, B, C, D, E ajanları paralel başlatıldı.
+- 2026-10-17: A-E iş paketlerinin her birinde ayrı worktree'de kod değişiklikleri var; henüz birleştirilmediler ve bu nedenle tamamlanmış sayılmıyorlar. Birleştirme, migration zinciri ve doğrulama adımları yukarıdaki plana göre yapılacak.
