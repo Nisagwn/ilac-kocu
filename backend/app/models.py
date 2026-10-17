@@ -127,11 +127,39 @@ class Medication(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # İlaç kataloğu bağlantısı (migration 0007): katalogdan seçilen ilaç doğrulanmıştır (verified=True) ve
+    # etken maddesi katalogdan gelir. Listede olmayan serbest metin ilaçlar verified=False kalır.
+    catalog_id: Mapped[int | None] = mapped_column(ForeignKey("drug_catalog.id", ondelete="SET NULL"), index=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
 
     patient: Mapped[Patient] = relationship(back_populates="medications")
+    catalog: Mapped["DrugCatalog | None"] = relationship()
     schedules: Mapped[list["MedicationSchedule"]] = relationship(
         back_populates="medication", cascade="all, delete-orphan"
     )
+
+
+class DrugCatalog(Base):
+    """İlaç kataloğu: etken madde (generic) başına bir satır; TR ve ABD ticari adları bağlıdır.
+
+    Kaynaklar: kürate Türkçe liste (app/data/drug_catalog_tr.yaml, source="tr_curated") ve isteğe bağlı
+    openFDA senkronu (app/services/drug_catalog.py, source="openfda"). `generic_name` normalize edilmiş
+    anahtardır (kombinasyonlarda bileşenler alfabetik, " + " ile: "metformin + sitagliptin").
+    `search_text` arama için normalize edilmiş (Türkçe karakter/büyük-küçük harf duyarsız) birleşik metindir.
+    """
+
+    __tablename__ = "drug_catalog"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    generic_name: Mapped[str] = mapped_column(String(160), unique=True, index=True)
+    display_name: Mapped[str] = mapped_column(String(200))
+    brand_names: Mapped[list] = mapped_column(JSON, default=list)  # ABD + TR ticari adlar
+    tr_brand_names: Mapped[list] = mapped_column(JSON, default=list)
+    pharm_class: Mapped[str | None] = mapped_column(String(200))
+    source: Mapped[str] = mapped_column(String(20), default="tr_curated")  # tr_curated | openfda
+    openfda_available: Mapped[bool] = mapped_column(Boolean, default=False, server_default="false")
+    search_text: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MedicationSchedule(Base):

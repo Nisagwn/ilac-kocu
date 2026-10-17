@@ -1,42 +1,21 @@
 """openFDA Drug Label API istemcisi.
 
 openFDA ABD etiketlerini döndürür; Türkiye'deki ticari isimler bulunmaz. Bu yüzden önce
-TR ticari isim -> etken madde eşlemesi yapılır, sorgu etken madde (generic_name) üzerinden atılır.
+TR ticari isim -> etken madde eşlemesi yapılır (kürate katalog: app/data/drug_catalog_tr.yaml,
+bkz. app/services/drug_catalog.py), sorgu etken madde (generic_name) üzerinden atılır.
+Kombinasyonlarda ("metformin + sitagliptin") her bileşen ayrı ifadeyle AND'lenir.
 """
 
 import json
 import logging
+from urllib.parse import quote
 
 import httpx
 
 from app.config import get_settings
 from app.redis_client import get_redis
-from app.services.guardrails import normalize
+from app.services import drug_catalog
 
-# Küçük, kürate eşleme tablosu (genişletilebilir). Anahtarlar normalize edilmiş.
-TR_BRAND_TO_GENERIC = {
-    "glifor": "metformin",
-    "glucophage": "metformin",
-    "matofin": "metformin",
-    "diaformin": "metformin",
-    "amaryl": "glimepiride",
-    "diamicron": "gliclazide",
-    "januvia": "sitagliptin",
-    "galvus": "vildagliptin",
-    "jardiance": "empagliflozin",
-    "forziga": "dapagliflozin",
-    "norvasc": "amlodipine",
-    "coversyl": "perindopril",
-    "delix": "ramipril",
-    "beloc": "metoprolol",
-    "concor": "bisoprolol",
-    "micardis": "telmisartan",
-    "diovan": "valsartan",
-    "atacand": "candesartan",
-    "lasix": "furosemide",
-    "lipitor": "atorvastatin",
-    "ator": "atorvastatin",
-}
 
 MAX_FIELD_CHARS = 1200
 CACHE_TTL_SECONDS = 24 * 3600
@@ -53,8 +32,8 @@ class OpenFDAUnavailable(Exception):
 
 
 def resolve_generic(name: str) -> str:
-    key = normalize(name).split()[0] if name.strip() else ""
-    return TR_BRAND_TO_GENERIC.get(key, key)
+    """İlaç adı (TR ticari ad, etken madde, "Glifor 1000 mg") -> etken madde anahtarı. Katalogdan beslenir."""
+    return drug_catalog.resolve_name(name)
 
 
 def _first(label: dict, field: str) -> str | None:
@@ -77,7 +56,7 @@ def parse_label(query: str, generic: str, label: dict) -> dict:
         "warnings": _first(label, "warnings_and_cautions") or _first(label, "warnings"),
         "drug_interactions": _first(label, "drug_interactions"),
         "source_name": "openFDA Drug Label API (ABD FDA etiketi)",
-        "source_url": f"https://api.fda.gov/drug/label.json?search=openfda.generic_name:\"{generic}\"",
+        "source_url": "https://api.fda.gov/drug/label.json?search=" + quote(drug_catalog.generic_search_expr(generic)),
         "set_id": label.get("set_id"),
         "disclaimer": "Bu bilgi ABD ilaç etiketinden alınmıştır, eğitim amaçlıdır; tedavi kararı için hekiminize danışın.",
     }
@@ -89,7 +68,7 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
     if not generic:
         raise DrugLabelNotFound(name)
 
-    params = {"search": f'openfda.generic_name:"{generic}"', "limit": 1}
+    params = {"search": drug_catalog.generic_search_expr(generic), "limit": 1}
     if settings.openfda_api_key:
         params["api_key"] = settings.openfda_api_key
 

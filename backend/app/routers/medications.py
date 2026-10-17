@@ -2,10 +2,29 @@ from fastapi import APIRouter, HTTPException, status
 from sqlalchemy import select
 
 from app.deps import DB, CurrentUser, get_patient_for_read, get_patient_for_write
-from app.models import Medication, MedicationSchedule
+from app.models import DrugCatalog, Medication, MedicationSchedule
 from app.schemas import MedicationIn, MedicationOut, MedicationUpdate
+from app.services import drug_catalog
 
 router = APIRouter(prefix="/patients/{patient_id}/medications", tags=["medications"])
+
+
+def _catalog_entry(db, catalog_id: int) -> DrugCatalog:
+    entry = db.get(DrugCatalog, catalog_id)
+    if entry is None:
+        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Seçilen ilaç katalogda bulunamadı")
+    return entry
+
+
+def _link_catalog(db, med: Medication, catalog_id: int | None, *, explicit: bool) -> None:
+    """Katalogdan seçildiyse bağlar (etken madde katalogdan); açıkça seçilmediyse adı birebir eşleşen
+    katalog satırına bağlar, eşleşme yoksa ilaç doğrulanmamış kalır."""
+    if catalog_id is not None:
+        drug_catalog.apply_catalog(med, _catalog_entry(db, catalog_id))
+    elif explicit:
+        drug_catalog.apply_catalog(med, None)
+    else:
+        drug_catalog.apply_catalog(med, drug_catalog.find_exact(db, med.name))
 
 
 def _get_med(db, patient_id: int, med_id: int) -> Medication:
@@ -27,8 +46,9 @@ def list_medications(patient_id: int, db: DB, user: CurrentUser, include_inactiv
 @router.post("", response_model=MedicationOut, status_code=status.HTTP_201_CREATED)
 def create_medication(patient_id: int, data: MedicationIn, db: DB, user: CurrentUser):
     get_patient_for_write(db, user, patient_id)
-    med = Medication(patient_id=patient_id, **data.model_dump(exclude={"schedules"}))
+    med = Medication(patient_id=patient_id, **data.model_dump(exclude={"schedules", "catalog_id"}))
     med.schedules = [MedicationSchedule(**s.model_dump()) for s in data.schedules]
+    _link_catalog(db, med, data.catalog_id, explicit=False)
     db.add(med)
     db.commit()
     db.refresh(med)
@@ -45,9 +65,16 @@ def get_medication(patient_id: int, med_id: int, db: DB, user: CurrentUser):
 def update_medication(patient_id: int, med_id: int, data: MedicationUpdate, db: DB, user: CurrentUser):
     get_patient_for_write(db, user, patient_id)
     med = _get_med(db, patient_id, med_id)
-    payload = data.model_dump(exclude_unset=True, exclude={"schedules"})
+    payload = data.model_dump(exclude_unset=True, exclude={"schedules", "catalog_id"})
     for k, v in payload.items():
         setattr(med, k, v)
+    if "catalog_id" in data.model_fields_set:
+        # Listeden seçim (id) ya da "listede yok, yine de ekle" (null)
+        _link_catalog(db, med, data.catalog_id, explicit=data.catalog_id is None)
+    elif "name" in payload:
+        _link_catalog(db, med, None, explicit=False)
+    elif med.catalog is not None:
+        med.active_ingredient = med.catalog.generic_name  # doğrulanmış ilacın etken maddesi katalogdan gelir
     if data.schedules is not None:
         # Mevcut zamanlamalar korunur (geçmiş doz kayıtları onlara bağlı); eşleşmeyenler eklenir/çıkarılır.
         wanted = {(s.time_of_day, s.days_of_week) for s in data.schedules}

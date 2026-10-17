@@ -7,6 +7,8 @@ Oluşturulan hesaplar (şifre: demo12345):
   + hekime atanmış 4 sentetik hasta (farklı uyum/risk profilleri; hekim panelini anlamlı kılmak için)
 
 Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir.
+Kürate Türkçe ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada upsert edilir (çevrimdışı);
+openFDA senkronu ayrı ve isteğe bağlıdır: python -m app.scripts.sync_drug_catalog
 """
 
 import random
@@ -35,6 +37,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
+from app.services.drug_catalog import link_unverified_medications, seed_catalog
 from app.services.rag.search import ensure_embeddings
 
 PW = "demo12345"
@@ -94,6 +97,9 @@ def run() -> None:
     db = SessionLocal()
     created, updated = seed_education(db)
     print(f"Eğitim içeriği: {created} eklendi, {updated} güncellendi.")
+    created, updated = seed_catalog(db)
+    print(f"İlaç kataloğu (kürate TR): {created} eklendi, {updated} güncellendi. "
+          "openFDA senkronu isteğe bağlı: python -m app.scripts.sync_drug_catalog")
     if db.scalar(select(User).where(User.email == "hasta@demo.local")):
         print("Demo verisi zaten var.")
         return
@@ -142,6 +148,8 @@ def run() -> None:
     for profile in EXTRA_PATIENTS:
         _add_extra_patient(db, rnd, doc.id, today, **profile)
 
+    db.flush()
+    link_unverified_medications(db)  # demo ilaçları (Glifor, Norvasc, Coversyl) katalogla doğrulanır
     db.commit()
     print("Demo verisi oluşturuldu. Şifre:", PW)
 

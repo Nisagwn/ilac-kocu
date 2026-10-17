@@ -107,10 +107,17 @@ class MedicationIn(BaseModel):
     dose_text: str | None = Field(default=None, max_length=120, description="Hekimin yazdığı doz, ör. '1000 mg'")
     notes: str | None = None
     schedules: list[ScheduleIn] = Field(default_factory=list)
+    catalog_id: int | None = Field(
+        default=None,
+        description="İlaç kataloğundan seçildiyse katalog id'si (GET /drugs/search). Verilirse etken madde "
+        "katalogdan gelir ve ilaç doğrulanmış (verified) olur; verilmezse ad katalogla birebir eşleşmedikçe "
+        "doğrulanmamış kaydedilir.",
+    )
 
 
 class MedicationUpdate(BaseModel):
     name: str | None = None
+    catalog_id: int | None = None  # gönderilip null ise katalog bağı kaldırılır (doğrulanmamış)
     active_ingredient: str | None = None
     dose_text: str | None = None
     notes: str | None = None
@@ -126,6 +133,8 @@ class MedicationOut(ORM):
     dose_text: str | None
     notes: str | None
     active: bool
+    catalog_id: int | None = None
+    verified: bool = False
     schedules: list[ScheduleOut]
 
 
@@ -250,3 +259,15 @@ class VapidKeyOut(BaseModel):
 
 class PushTestOut(BaseModel):
     sent: int
+
+
+# ---------- İlaç kataloğu ----------
+class DrugSearchOut(BaseModel):
+    id: int
+    display_name: str
+    generic_name: str
+    matched_brand: str | None = Field(description="Sorguyla eşleşen ticari ad (etken maddeyle eşleştiyse null)")
+    tr_brand_names: list[str]
+    pharm_class: str | None
+    source: str  # tr_curated | openfda
+    openfda_available: bool
