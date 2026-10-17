@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     login_email_window_seconds: int = 900
     register_ip_limit: int = 5  # IP başına saatlik kayıt
     register_ip_window_seconds: int = 3600
+    # --- Kullanıcı başına genel istek sınırı (token bucket, app/platform.py) ---
+    rate_limit_enabled: bool = True  # testlerde kapalı (tests/conftest.py)
+    rate_limit_write_per_minute: int = 60  # POST/PUT/PATCH/DELETE
+    rate_limit_read_per_minute: int = 300  # GET/HEAD
+    rate_limit_coach_per_minute: int = 10  # POST /coach/chat ve /coach/jobs (acil belirti mesajları hariç)
+    idempotency_ttl_hours: int = 24  # Idempotency-Key kayıtlarının saklanma süresi
     # X-Forwarded-For yalnızca bu adreslerden (IP ya da CIDR) gelen isteklerde dikkate alınır.
     # Varsayılan: aynı makinedeki Next.js sunucusu. Docker'da web konteynerinin ağı eklenmeli
     # (ör. ["172.16.0.0/12"]) ve API portu dışarıya açılmamalıdır.

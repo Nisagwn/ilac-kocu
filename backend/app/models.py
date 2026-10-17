@@ -346,3 +346,23 @@ class AccessLog(Base):
     action: Mapped[str] = mapped_column(String(20))  # read | write
     path: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IdempotencyKey(Base):
+    """`Idempotency-Key` başlığıyla gelen yazma isteklerinin kaydı (app/platform.py).
+
+    request_hash = sha256(yöntem + yol + gövde). response_status NULL ise istek hâlâ işleniyordur.
+    Yalnızca 2xx yanıtlar saklanır; diğerlerinde kayıt silinir ve istemci aynı anahtarla yeniden deneyebilir.
+    Süresi dolan (varsayılan 24 saat) kayıtlar `purge_expired_idempotency_keys` ile temizlenir.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_user_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(255))
+    request_hash: Mapped[str] = mapped_column(String(64))
+    response_status: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[dict | list | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

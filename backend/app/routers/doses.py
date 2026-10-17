@@ -2,12 +2,13 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.config import get_settings
 from app.deps import DB, CurrentUser, get_patient_for_read, get_patient_for_write
 from app.models import DoseLog, Medication, MedicationSchedule
+from app.pagination import MAX_LIMIT, paginate, set_next_cursor_headers
 from app.schemas import DoseLogIn, DoseLogOut, TodayDoseOut
 
 router = APIRouter(prefix="/patients/{patient_id}/doses", tags=["doses"])
@@ -43,8 +44,10 @@ def today(patient_id: int, db: DB, user: CurrentUser, day: date | None = None):
 
 
 @router.put("", response_model=DoseLogOut)
+@router.post("", response_model=DoseLogOut)
 def log_dose(patient_id: int, data: DoseLogIn, db: DB, user: CurrentUser):
-    """'Aldım / almadım' işaretleme. Aynı gün aynı doz için tekrar çağrılırsa kaydı günceller (idempotent)."""
+    """'Aldım / almadım' işaretleme. Aynı gün aynı doz için tekrar çağrılırsa kaydı günceller (idempotent).
+    PUT ve POST eşdeğerdir; `Idempotency-Key` başlığı desteklenir (app/platform.py)."""
     get_patient_for_write(db, user, patient_id)
     sched = db.get(MedicationSchedule, data.schedule_id)
     if sched is None or sched.medication.patient_id != patient_id:
@@ -74,11 +77,17 @@ def log_dose(patient_id: int, data: DoseLogIn, db: DB, user: CurrentUser):
 @router.get("", response_model=list[DoseLogOut])
 def list_doses(
     patient_id: int, db: DB, user: CurrentUser, days: Annotated[int, Query(ge=1, le=90)] = 30,
+    limit: Annotated[int | None, Query(ge=1, le=MAX_LIMIT)] = None,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+    *, request: Request, response: Response,
 ):
+    """Son `days` günün doz kayıtları, yeniden eskiye. `limit`/`cursor` verilirse sayfalı; sonraki sayfa
+    `X-Next-Cursor` / `Link` başlığında."""
     get_patient_for_read(db, user, patient_id)
     since = local_today() - timedelta(days=days - 1)
-    return db.scalars(
-        select(DoseLog)
-        .where(DoseLog.patient_id == patient_id, DoseLog.scheduled_date >= since)
-        .order_by(DoseLog.scheduled_date.desc())
-    ).all()
+    q = select(DoseLog).where(DoseLog.patient_id == patient_id, DoseLog.scheduled_date >= since)
+    if limit is None and cursor is None:
+        return db.scalars(q.order_by(DoseLog.scheduled_date.desc())).all()
+    items, next_cursor = paginate(db, q, DoseLog.scheduled_date, DoseLog.id, limit=limit or 50, cursor=cursor)
+    set_next_cursor_headers(request, response, next_cursor)
+    return items

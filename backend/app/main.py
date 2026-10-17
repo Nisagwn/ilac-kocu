@@ -6,6 +6,7 @@ from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
 from app.observability import RequestContextMiddleware, metrics_router
+from app.platform import API_PREFIX, install_platform
 from app.routers import (
     alerts,
     auth,
@@ -13,10 +14,12 @@ from app.routers import (
     doses,
     drugs,
     education,
+    health,
     measurements,
     medications,
     patients,
     push,
+    resources,
     summaries,
 )
 from app.services.reminders import start_scheduler
@@ -54,6 +57,8 @@ app = FastAPI(
     lifespan=lifespan,
 )
 
+# Platform katmanı (app/platform.py): Deprecation, kullanıcı başına istek sınırı, Idempotency-Key, ETag
+install_platform(app)
 app.add_middleware(
     CORSMiddleware,
     allow_origins=settings.cors_origins,
@@ -65,10 +70,10 @@ app.add_middleware(
 app.add_middleware(RequestContextMiddleware)
 app.include_router(metrics_router)
 
+# İş uçları /v1 altında. Sürümsüz eski yollar geriye dönük uyum için bir süre kalır: OpenAPI'de görünmez,
+# yanıtlarına "Deprecation: true" eklenir. Üst düzey kaynak yolları (resources) yalnızca /v1'de.
 for r in (auth, patients, medications, doses, measurements, alerts, drugs, education, coach, summaries, push):
-    app.include_router(r.router)
-
-
-@app.get("/health", tags=["system"])
-def health():
-    return {"status": "ok"}
+    app.include_router(r.router, prefix=API_PREFIX)
+    app.include_router(r.router, include_in_schema=False)
+app.include_router(resources.router, prefix=API_PREFIX)
+app.include_router(health.router)  # /health, /health/live, /health/ready (sürümsüz)

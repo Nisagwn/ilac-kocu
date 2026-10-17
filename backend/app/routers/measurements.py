@@ -1,11 +1,12 @@
 from datetime import UTC, datetime, timedelta
 from typing import Annotated
 
-from fastapi import APIRouter, Query, status
+from fastapi import APIRouter, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.deps import DB, CurrentUser, get_patient_for_read, get_patient_for_write
 from app.models import Alert, Measurement, MeasurementType
+from app.pagination import MAX_LIMIT, paginate, set_next_cursor_headers
 from app.schemas import AlertOut, MeasurementCreated, MeasurementIn, MeasurementOut
 from app.services.thresholds import evaluate_measurement
 
@@ -44,13 +45,22 @@ def list_measurements(
     patient_id: int, db: DB, user: CurrentUser,
     type: MeasurementType | None = None,
     days: Annotated[int, Query(ge=1, le=365)] = 30,
+    limit: Annotated[int | None, Query(ge=1, le=MAX_LIMIT)] = None,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+    *, request: Request, response: Response,
 ):
+    """Son `days` gün, eskiden yeniye (grafik için). `limit`/`cursor` verilirse sayfalı mod: yeniden eskiye,
+    sonraki sayfa `X-Next-Cursor` / `Link` başlığında (app/pagination.py)."""
     get_patient_for_read(db, user, patient_id)
     since = datetime.now(UTC) - timedelta(days=days)
     q = select(Measurement).where(Measurement.patient_id == patient_id, Measurement.measured_at >= since)
     if type:
         q = q.where(Measurement.type == type)
-    return db.scalars(q.order_by(Measurement.measured_at)).all()
+    if limit is None and cursor is None:
+        return db.scalars(q.order_by(Measurement.measured_at)).all()
+    items, next_cursor = paginate(db, q, Measurement.measured_at, Measurement.id, limit=limit or 50, cursor=cursor)
+    set_next_cursor_headers(request, response, next_cursor)
+    return items
 
 
 @router.delete("/{measurement_id}", status_code=status.HTTP_204_NO_CONTENT)

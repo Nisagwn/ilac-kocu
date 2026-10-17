@@ -1,10 +1,11 @@
 from typing import Annotated
 
-from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Response, status
+from fastapi import APIRouter, BackgroundTasks, Depends, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.deps import DB, get_own_patient, require_roles
 from app.models import CoachMessage, Role, User
+from app.pagination import paginate, set_next_cursor_headers
 from app.redis_client import get_redis
 from app.schemas import ChatIn, CoachMessageOut
 from app.services import guardrails as gr
@@ -72,10 +73,15 @@ def get_job(job_id: str, db: DB, user: PatientUser):
 
 
 @router.get("/history", response_model=list[CoachMessageOut])
-def history(db: DB, user: PatientUser, limit: Annotated[int, Query(ge=1, le=200)] = 50):
+def history(
+    db: DB, user: PatientUser, request: Request, response: Response,
+    limit: Annotated[int, Query(ge=1, le=200)] = 50,
+    cursor: Annotated[str | None, Query(max_length=200)] = None,
+):
+    """Son `limit` mesaj, sohbet sırasıyla (eskiden yeniye). Daha eski mesajlar varsa `X-Next-Cursor` başlığı
+    döner; `?cursor=` ile bir önceki sayfa (daha eski mesajlar) alınır."""
     patient = get_own_patient(db, user)
-    msgs = db.scalars(
-        select(CoachMessage).where(CoachMessage.patient_id == patient.id)
-        .order_by(CoachMessage.created_at.desc(), CoachMessage.id.desc()).limit(limit)
-    ).all()
+    q = select(CoachMessage).where(CoachMessage.patient_id == patient.id)
+    msgs, next_cursor = paginate(db, q, CoachMessage.created_at, CoachMessage.id, limit=limit, cursor=cursor)
+    set_next_cursor_headers(request, response, next_cursor)
     return list(reversed(msgs))
