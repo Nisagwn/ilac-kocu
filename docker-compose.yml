@@ -15,6 +15,10 @@ services:
 
   redis:
     image: redis:7-alpine
+    healthcheck:
+      test: ["CMD", "redis-cli", "ping"]
+      interval: 5s
+      retries: 10
 
   # Şema migration'ları: API ve işçiden önce bir kez koşar, sonra çıkar
   migrate:
@@ -29,24 +33,58 @@ services:
       db:
         condition: service_healthy
 
+  # API: nginx arkasında API_REPLICAS kopya (varsayılan 3). Dışarıya port açmaz; trafik nginx'ten gelir.
   api:
     build: ./backend
     image: ilac-kocu-backend
+    # Düzgün kapanma: SIGTERM'de yeni bağlantı alınmaz, süren istekler en çok 20 sn içinde bitirilir;
+    # nginx o sırada isteği diğer kopyalara aktarır. stop_grace_period bundan uzun olmalı.
+    command: ["uvicorn", "app.main:app", "--host", "0.0.0.0", "--port", "8000", "--timeout-graceful-shutdown", "20"]
+    stop_grace_period: 30s
+    deploy:
+      replicas: ${API_REPLICAS:-3}
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
       REDIS_URL: redis://redis:6379/0
-      # Next.js (web) konteyneri Docker iç ağından gelir; gerçek istemci IP'sini X-Forwarded-For'da iletir
+      # nginx Docker iç ağından gelir ve gerçek istemci IP'sini X-Forwarded-For'da iletir
       TRUSTED_PROXIES: '["127.0.0.1","::1","172.16.0.0/12"]'
-    # Yalnızca bu makineden (Swagger için); dışarıya açık olursa X-Forwarded-For taklit edilebilir
-    ports: ["127.0.0.1:8000:8000"]
+      OTEL_SERVICE_NAME: ilac-kocu-api
+    healthcheck:
+      # Canlılık: süreç yanıt veriyor mu (bağımlılık kontrolü /health/ready'de; nginx pasif sağlık kontrolü yapar)
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=2)"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+      start_period: 10s
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
 
-  # Koç kuyruğu işçisi + doz hatırlatma zamanlayıcısı (API zamanlayıcıyı başlatmaz)
+  # Ters vekil + yük dengeleyici (infra/nginx): güvenlik başlıkları, gzip, IP başına istek sınırı, X-Upstream
+  nginx:
+    image: nginx:1.28-alpine
+    environment:
+      NGINX_RATE_LIMIT: ${NGINX_RATE_LIMIT:-20r/s}
+      NGINX_RATE_BURST: ${NGINX_RATE_BURST:-40}
+    volumes:
+      - ./infra/nginx/templates:/etc/nginx/templates:ro
+      - ./infra/nginx/snippets:/etc/nginx/snippets:ro
+    # Swagger ve doğrudan API erişimi için yalnızca bu makineden (eski API portu korunur)
+    ports: ["127.0.0.1:8000:8080"]
+    healthcheck:
+      test: ["CMD", "wget", "-qO-", "http://127.0.0.1:8080/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    depends_on:
+      api:
+        condition: service_healthy
+
+  # Koç kuyruğu işçisi + zamanlanmış işler (yalnızca lider işçide; PostgreSQL advisory lock).
+  # Birden çok işçi açılabilir: docker compose up -d --scale worker=2
   worker:
     build: ./backend  # migrate/api/worker aynı imajı paylaşır (derleme önbellekten gelir)
     image: ilac-kocu-backend
@@ -55,22 +93,68 @@ services:
     environment:
       DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
       REDIS_URL: redis://redis:6379/0
+      OTEL_SERVICE_NAME: ilac-kocu-worker
+    # Düzgün kapanma: elindeki koç işini ve çalışan zamanlanmış işi bitirir, liderlik kilidini bırakır
     stop_grace_period: 30s
     depends_on:
       migrate:
         condition: service_completed_successfully
       redis:
-        condition: service_started
+        condition: service_healthy
 
   web:
     build: ./frontend
+    image: ilac-kocu-web
     environment:
-      # Sunucu tarafı proxy FastAPI'ye Docker ağı üzerinden gider; tarayıcı yalnızca web'e konuşur.
-      API_URL: http://api:8000
+      # Sunucu tarafı proxy API'ye nginx (yük dengeleyici) üzerinden gider; tarayıcı yalnızca web'e konuşur.
+      API_URL: http://nginx:8080
     ports: ["3000:3000"]
     depends_on:
-      api:
-        condition: service_started
+      nginx:
+        condition: service_healthy
+
+  # ---- Gözlemlenebilirlik (isteğe bağlı): docker compose --profile observability up -d ----
+  # İzleme için .env'e: OTEL_EXPORTER_OTLP_ENDPOINT=http://jaeger:4318  (boşsa izleme kapalı)
+  prometheus:
+    image: prom/prometheus:v3.1.0
+    profiles: [observability]
+    command: ["--config.file=/etc/prometheus/prometheus.yml", "--storage.tsdb.retention.time=7d"]
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+    ports: ["127.0.0.1:9090:9090"]
+
+  grafana:
+    image: grafana/grafana:11.4.0
+    profiles: [observability]
+    environment:
+      GF_AUTH_ANONYMOUS_ENABLED: "true"
+      GF_AUTH_ANONYMOUS_ORG_ROLE: Viewer
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_DEFAULT_LANGUAGE: tr-TR
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+    ports: ["127.0.0.1:3001:3000"]
+    depends_on: [prometheus]
+
+  jaeger:
+    image: jaegertracing/all-in-one:1.64.0
+    profiles: [observability]
+    environment:
+      COLLECTOR_OTLP_ENABLED: "true"
+    ports: ["127.0.0.1:16686:16686"]  # arayüz; OTLP (4318) yalnızca iç ağda
+
+  # ---- Yük testi (isteğe bağlı): docker compose --profile loadtest run --rm k6 run /scripts/load.js ----
+  k6:
+    image: grafana/k6:0.55.0
+    profiles: [loadtest]
+    environment:
+      BASE_URL: http://nginx:8080
+    volumes:
+      - ./infra/k6:/scripts:ro
+    depends_on:
+      nginx:
+        condition: service_healthy
 
 volumes:
   pgdata:

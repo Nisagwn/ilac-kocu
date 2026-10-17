@@ -163,6 +163,9 @@ def main() -> None:
         start_http_server(settings.worker_metrics_port)
         logger.info("Worker metrikleri :%s/metrics adresinde", settings.worker_metrics_port)
 
+    from app.tracing import setup_tracing
+
+    setup_tracing(service_name="ilac-kocu-worker")  # OTEL_EXPORTER_OTLP_ENDPOINT yoksa kapalı
     leadership = Leadership(stop)
     leadership.tick()  # ilk deneme senkron: lider hemen zamanlayıcıyı başlatsın
     leadership.start()

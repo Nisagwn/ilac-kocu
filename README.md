@@ -78,14 +78,15 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 
 ```bash
 cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
-docker compose up --build                     # PostgreSQL + pgvector, Redis, API, web — migration otomatik
+docker compose up --build                     # PostgreSQL + pgvector, Redis, API×3 + nginx, işçi, web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
 
 | Adres | |
 |---|---|
 | http://localhost:3000 | Uygulama (PWA) |
-| http://localhost:8000/docs | Swagger / OpenAPI |
+| http://localhost:8000/docs | Swagger / OpenAPI (nginx yük dengeleyici üzerinden) |
+| `docker compose --profile observability up -d` | + Prometheus :9090, Grafana :3001, Jaeger :16686 ([`infra/README.md`](infra/README.md)) |
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
@@ -96,7 +97,7 @@ Windows / macOS / Linux adım adım kurulum, Docker'sız geliştirme ve sorun gi
 
 ![Mimari şeması](docs/gorseller/12-mimari.png)
 
-Uzun ve zamanlanmış işler ayrı bir **worker** serviste çalışır; API yalnızca istekleri karşılar. Redis kuyruk, istek sınırı, token iptali ve önbellek için ortak katmandır. Ayrıntı: [docs/M1/05-mimari.md](docs/M1/05-mimari.md).
+API, **nginx** yük dengeleyicinin arkasında birden çok kopya (varsayılan 3) olarak çalışır; durum veritabanı ve Redis'tedir, kopyalar arasında paylaşılan bellek yoktur. Uzun ve zamanlanmış işler ayrı **worker** serviste çalışır; zamanlanmış işler yalnızca lider işçide (PostgreSQL advisory lock). Redis kuyruk, istek sınırı (token bucket), devre kesici durumu, token iptali ve önbellek için ortak katmandır. Ayrıntı: [docs/M1/05-mimari.md](docs/M1/05-mimari.md), [infra/README.md](infra/README.md).
 
 ```mermaid
 flowchart LR
@@ -105,13 +106,17 @@ flowchart LR
         SW["Service Worker<br/>push · offline kabuk"]
     end
     PX["Next.js sunucusu<br/>/api/proxy · httpOnly çerez"]
-    subgraph B["FastAPI"]
+    NG["nginx<br/>yük dengeleme · IP sınırı<br/>güvenlik başlıkları"]
+    subgraph B["FastAPI × 3 (/v1)"]
         RB["JWT + roller<br/>yetkisiz → 404"]
         GR["Guardrail<br/>girdi · çıktı"]
         CO["Koç<br/>Claude tool-use<br/>↘ kural tabanlı yedek"]
         AD["Uyum skoru<br/>deterministik"]
         RG["RAG"]
-        SC["APScheduler<br/>+ pywebpush"]
+    end
+    subgraph W["Worker (lider)"]
+        SC["APScheduler: hatırlatma,<br/>haftalık özet, temizlik"]
+        Q["Koç kuyruğu<br/>yeniden deneme · DLQ"]
     end
     DB[("PostgreSQL<br/>+ pgvector")]
     RD[("Redis")]
@@ -119,16 +124,47 @@ flowchart LR
     FDA["openFDA"]
     WP["Push servisi"]
 
-    PWA --> PX --> RB
+    PWA --> PX --> NG --> RB
     RB --> GR --> CO
     CO <--> LLM
     CO -->|tool| AD & RG
     AD & RG & RB --> DB
     RB --> FDA -.önbellek.-> RD
     SC --> WP --> SW
+    RD --> Q --> CO
 ```
 
-Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-mimari.md) · Veri modeli: [`docs/er-diyagrami.md`](docs/er-diyagrami.md)
+Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-mimari.md) · Altyapı (nginx, kopyalar, gözlemlenebilirlik): [`infra/README.md`](infra/README.md)
+
+### Veri modeli (ER)
+
+İlişkiler aşağıda; tüm sütunlar ve kısıtlar: [`docs/er-diyagrami.md`](docs/er-diyagrami.md).
+
+```mermaid
+erDiagram
+    users ||--o| patients : "hasta profili"
+    users ||--o| clinicians : "hekim profili"
+    clinicians ||--o{ patients : "takip eder"
+    patients ||--o{ patient_caregivers : ""
+    users ||--o{ patient_caregivers : "bakım veren"
+    patients ||--o{ medications : ""
+    drug_catalog |o--o{ medications : "katalog eşleşmesi"
+    medications ||--o{ medication_schedules : ""
+    medication_schedules ||--o{ dose_logs : ""
+    medication_schedules ||--o{ reminder_logs : ""
+    patients ||--o{ dose_logs : ""
+    patients ||--o{ measurements : ""
+    patients ||--o{ coach_messages : ""
+    patients ||--o{ coach_jobs : ""
+    patients ||--o{ alerts : ""
+    patients ||--o{ weekly_summaries : ""
+    patients ||--o{ llm_usage : ""
+    patients ||--o{ access_logs : "erişilen"
+    users ||--o{ push_subscriptions : ""
+    users ||--o{ refresh_tokens : ""
+    users ||--o{ idempotency_keys : ""
+    users |o--o{ education_contents : "onaylayan hekim"
+```
 
 | Katman | Teknoloji |
 |---|---|

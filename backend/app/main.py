@@ -29,6 +29,7 @@ from app.routers import (
     summaries,
 )
 from app.scheduler import start_scheduler
+from app.tracing import setup_tracing
 
 settings = get_settings()
 logger = logging.getLogger(__name__)
@@ -94,3 +95,6 @@ app.include_router(collections.router, prefix=API_VERSION_PREFIX)
 # Geriye dönük: sürümsüz eski yollar (şemada görünmez, DeprecationMiddleware başlık ekler)
 for r in _ROUTERS:
     app.include_router(r.router, include_in_schema=False, deprecated=True)
+
+# Dağıtık izleme: yalnızca OTEL_EXPORTER_OTLP_ENDPOINT tanımlıysa (compose "observability" profili → Jaeger)
+setup_tracing(app)
