@@ -17,20 +17,18 @@ import base64
 import binascii
 import json
 from datetime import date, datetime
-from typing import Any, Generic, TypeVar
+from typing import Any
 
 from fastapi import HTTPException, Request, Response
 from pydantic import BaseModel
 from sqlalchemy import Select, and_, or_
 from sqlalchemy.orm import Session
 
-T = TypeVar("T")
-
 MAX_LIMIT = 200
 DEFAULT_LIMIT = 50
 
 
-class Page(BaseModel, Generic[T]):
+class Page[T](BaseModel):
     items: list[T]
     next_cursor: str | None = None
 

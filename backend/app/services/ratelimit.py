@@ -4,12 +4,11 @@ SÖZLEŞME:
     hit(key, limit, window_seconds, cost=1) -> RateLimitResult
         Kovadan `cost` jeton harcamayı dener; sonucu (izin, kalan, Retry-After) döndürür, istisna fırlatmaz.
     check_rate_limit(key: str, limit: int, window_seconds: int) -> None
-        Sınır aşıldıysa HTTP 429 (Retry-After + X-RateLimit-* başlıklarıyla) fırlatır.
+        Uçlara özgü sabit pencere sınırını uygular (giriş/kayıt/koç/ilaç arama).
 
-Algoritma: kova kapasitesi `limit` jetondur ve `window_seconds` içinde tamamen dolar (saniyede
-limit/window jeton). Boş kovayla başlayan bir anahtar ilk anda `limit` isteğe izin verir (sabit pencerenin
-verdiği "pencere başına en fazla limit" güvencesi korunur); sonrasında istekler dolum hızında kabul edilir.
-Sabit pencereden farkı: pencere sınırında 2×limit patlaması oluşmaz.
+`hit` token bucket algoritması kullanır: kova `window_seconds` içinde tamamen dolar. Bu, API platformundaki
+kullanıcı başına genel sınırlar içindir. Kimlik doğrulama gibi uçların kendi sınırları ise sabit penceredir;
+pencere dolmadan token yenilenmesine izin verilmez.
 
 Redis varsa kova Redis'te bir hash'tir ("rl:<key>" → tokens, ts) ve Lua betiğiyle atomik güncellenir
 (saat olarak Redis TIME kullanılır: birden çok API sürecinde saat kayması sorun olmaz). Redis yoksa ya da
@@ -73,6 +72,7 @@ return {allowed, tostring(tokens), tostring(wait)}
 """
 
 _local: dict[str, tuple[float, float, int]] = {}  # key -> (jeton, son güncelleme zamanı, pencere)
+_fixed_windows: dict[str, tuple[int, float]] = {}  # key -> (sayaç, pencere bitişi)
 _lock = Lock()
 _LOCAL_MAX_KEYS = 50_000  # bu sayıyı aşınca dolmuş kovalar atılır (bellek sınırı)
 _now = time.monotonic  # testlerde değiştirilebilir saat
@@ -122,6 +122,33 @@ def _hit_redis(r, key: str, limit: int, window: int, cost: int) -> RateLimitResu
     return _result(int(allowed) == 1, limit, float(tokens), float(wait))
 
 
+def _hit_fixed_local(key: str, window: int) -> tuple[int, int]:
+    now = _now()
+    with _lock:
+        count, reset_at = _fixed_windows.get(key, (0, now + window))
+        if now >= reset_at:
+            count, reset_at = 0, now + window
+        count += 1
+        _fixed_windows[key] = (count, reset_at)
+        if len(_fixed_windows) > _LOCAL_MAX_KEYS:
+            for stale_key, (_, expiry) in list(_fixed_windows.items()):
+                if expiry <= now:
+                    del _fixed_windows[stale_key]
+    return count, max(1, math.ceil(reset_at - now))
+
+
+def _hit_fixed_redis(r, key: str, window: int) -> tuple[int, int]:
+    rkey = f"rl:fixed:{key}"
+    pipe = r.pipeline()
+    pipe.incr(rkey)
+    pipe.ttl(rkey)
+    count, ttl = pipe.execute()
+    if ttl is None or ttl < 0:
+        r.expire(rkey, window)
+        ttl = window
+    return int(count), max(1, int(ttl))
+
+
 def hit(key: str, limit: int, window_seconds: int, cost: int = 1) -> RateLimitResult:
     if limit <= 0 or window_seconds <= 0:
         raise ValueError("limit ve window_seconds pozitif olmalı")
@@ -138,13 +165,28 @@ TOO_MANY_REQUESTS_DETAIL = "Çok fazla istek gönderildi. Lütfen biraz sonra te
 
 
 def check_rate_limit(key: str, limit: int, window_seconds: int) -> None:
-    res = hit(key, limit, window_seconds)
-    if not res.allowed:
-        raise HTTPException(status.HTTP_429_TOO_MANY_REQUESTS, TOO_MANY_REQUESTS_DETAIL, headers=res.headers())
+    if limit <= 0 or window_seconds <= 0:
+        raise ValueError("limit ve window_seconds pozitif olmalı")
+    r = get_redis()
+    try:
+        count, retry_after = _hit_fixed_redis(r, key, window_seconds) if r else _hit_fixed_local(key, window_seconds)
+    except Exception:  # Redis geçici olarak yoksa süreç içi sayaca düş
+        count, retry_after = _hit_fixed_local(key, window_seconds)
+    if count > limit:
+        raise HTTPException(
+            status.HTTP_429_TOO_MANY_REQUESTS,
+            TOO_MANY_REQUESTS_DETAIL,
+            headers={
+                "Retry-After": str(retry_after),
+                "X-RateLimit-Limit": str(limit),
+                "X-RateLimit-Remaining": "0",
+            },
+        )
 
 
 def reset_local_limits() -> None:
     """Testler için süreç içi kovaları temizler."""
     with _lock:
         _local.clear()
+        _fixed_windows.clear()
     _scripts.clear()

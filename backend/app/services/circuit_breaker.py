@@ -250,13 +250,11 @@ class CircuitBreaker:
             raise CircuitOpenError(self.name)
         try:
             yield
-        except ignore if ignore is not None else self.ignore:
-            self.record_success()
-            raise
         except BaseException as exc:
-            if isinstance(exc, CircuitOpenError | GeneratorExit | KeyboardInterrupt):
-                raise
-            self.record_failure()
+            if isinstance(exc, ignore if ignore is not None else self.ignore):
+                self.record_success()
+            elif not isinstance(exc, (CircuitOpenError, GeneratorExit, KeyboardInterrupt)):
+                self.record_failure()
             raise
         else:
             self.record_success()

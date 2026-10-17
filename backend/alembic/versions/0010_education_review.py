@@ -14,7 +14,7 @@ import sqlalchemy as sa
 
 
 revision: str = '0010_education_review'
-down_revision: Union[str, None] = '0006_security'
+down_revision: Union[str, None] = '0008_idempotency'
 branch_labels: Union[str, Sequence[str], None] = None
 depends_on: Union[str, Sequence[str], None] = None
 

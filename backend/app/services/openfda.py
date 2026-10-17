@@ -16,7 +16,6 @@ from app.config import get_settings
 from app.redis_client import get_redis
 from app.services import drug_catalog
 
-
 MAX_FIELD_CHARS = 1200
 CACHE_TTL_SECONDS = 24 * 3600
 

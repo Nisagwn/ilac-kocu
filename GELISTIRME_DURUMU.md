@@ -59,15 +59,13 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] `POST /education/ingest-drug` bakım verene kapalı
 - [ ] `tests/test_clinical_insights.py`, `tests/test_education_review.py`
 
-## Birleştirme planı (ajanlar bittikten sonra)
-1. Her ajan dalını `gelistirme`'ye sırayla birleştir: **A → B → E → D → C** (C en çok compose/main.py'ye dokunur, en son).
-2. **Migration zinciri**: ajanların hepsi `down_revision="0006_security"` yazdı. Birleştirirken zincirle:
-   `0006_security → 0007_drug_catalog → 0008_idempotency → 0009_weekly_summaries (varsa) → 0010_education_review (varsa)`.
-   Sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head` dene.
+## Aktarma sonrası doğrulama ve kalan işler
+1. ✅ A → B → E → D → C iş paketlerindeki mevcut worktree değişiklikleri 2026-10-17'de `gelistirme` dalına aktarıldı. `schemas.py` ve `main.py` birleştirme çakışmaları çözüldü. Aşağıdaki tamamlanmamış iş kutuları bitmiş sayılmaz.
+2. ✅ **Migration zinciri**: `0006_security → 0007_drug_catalog → 0008_idempotency → 0010_education_review`; `alembic heads` tek head gösteriyor ve PostgreSQL'de `upgrade head` başarıyla uygulandı. Haftalık özet migration'ı `0009` henüz oluşturulmadı. Canlı demo verisini korumak için PostgreSQL'de `downgrade -1` çalıştırılmadı.
 3. Çakışma beklenen dosyalar: `backend/app/main.py`, `backend/app/models.py`, `backend/app/config.py`, `backend/app/observability.py`, `backend/app/worker.py`, `frontend/src/lib/api.ts`, `frontend/src/lib/types.ts`, `frontend/src/components/clinician/patient-detail.tsx`, `docker-compose.yml`, `backend/requirements.txt`.
 4. openFDA çağrısını D'nin circuit breaker'ıyla sar (A'nın `openfda.py`'si üzerine).
 5. B'nin idempotency temizlik fonksiyonunu D'nin worker zamanlayıcısına bağla.
-6. Tüm testler + ruff + frontend lint/build; `docker compose up --build` ile uçtan uca deneme (giriş, ilaç arama/ekleme, doz, koç, hekim paneli).
+6. ✅ Backend testleri (512), ruff, frontend lint/build başarılı. `docker compose up --build` başarılı; API readiness ve web giriş sayfası doğrulandı. Giriş/ilaç/doz/koç/hekim akışlarıyla uçtan uca demo henüz yapılmadı.
 7. Belgeler: `docs/er-diyagrami.md` güncelle (yeni tablolar: drug_catalog, idempotency_keys, weekly_summaries?, coach_jobs, refresh_tokens, access_logs), README'ye ER diyagramını göm, README "Durum" tablosu.
 
 ## Kalan (bu turun dışında)
@@ -78,4 +76,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 
 ## Günlük
 - 2026-10-17: `gelistirme` dalı açıldı (474 test geçti). A, B, C, D, E ajanları paralel başlatıldı.
-- 2026-10-17: A-E iş paketlerinin her birinde ayrı worktree'de kod değişiklikleri var; henüz birleştirilmediler ve bu nedenle tamamlanmış sayılmıyorlar. Birleştirme, migration zinciri ve doğrulama adımları yukarıdaki plana göre yapılacak.
+- 2026-10-17: A-E worktree'lerindeki mevcut değişiklikler A → B → E → D → C sırasıyla `gelistirme` dalına aktarıldı. Migration zinciri düzeltildi; 512 backend testi, ruff, frontend lint/build başarılı. Compose stack çalışıyor; `/health/ready`, `/openapi.json` ve `/giris` 200 döndürüyor. İş paketlerindeki tamamlanmamış kutular ayrıca takip ediliyor.
