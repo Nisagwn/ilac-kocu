@@ -14,7 +14,7 @@ from urllib.parse import quote
 from sqlalchemy import select
 from sqlalchemy.orm import Session
 
-from app.models import EducationContent
+from app.models import EducationContent, set_review
 from app.services import openfda
 from app.services.rag.embeddings import document_text, get_provider
 
@@ -74,7 +74,8 @@ def source_url_for(data: dict) -> str:
 def ingest_label_data(db: Session, data: dict) -> EducationContent | None:
     """parse_label çıktısını drug_key'e göre upsert eder ve embed eder (commit eder).
 
-    İçerik çıkarılamazsa None döner."""
+    Yeni ya da metni değişen içerik hekim onayı bekler (review_status="pending"); reddedilmiş ve metni
+    değişmemiş içerik reddedilmiş kalır. İçerik çıkarılamazsa None döner."""
     drug_key = (data.get("resolved_generic") or "").strip().lower()
     body = build_body(data)
     if not drug_key or not body:
@@ -84,9 +85,12 @@ def ingest_label_data(db: Session, data: dict) -> EducationContent | None:
 
     row = db.scalar(select(EducationContent).where(EducationContent.drug_key == drug_key))
     if row is None:
-        row = EducationContent(drug_key=drug_key, kind="openfda", reviewed=False)
+        row = EducationContent(drug_key=drug_key, kind="openfda")
+        set_review(row, "pending")
         db.add(row)
     changed = (row.title, row.body, row.tags) != (title, body, tags)
+    if changed and row.id is not None:
+        set_review(row, "pending")  # etiket metni değişti: hekim yeniden onaylamalı
     row.title, row.body, row.tags = title, body, tags
     row.source_name, row.source_url = SOURCE_NAME, source_url_for(data)
     if changed or row.embedding_model is None:

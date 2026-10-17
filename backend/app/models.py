@@ -261,9 +261,29 @@ class EducationContent(Base):
     # M4 RAG (migration 0003_rag): PostgreSQL'de pgvector vector(384), SQLite'ta JSON
     kind: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
     drug_key: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)  # openfda: etken madde
-    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # klinisyen gözden geçirmesi yapıldı mı
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # = review_status == "approved" (geriye dönük)
+    # Hekim onayı (migration 0009): pending | approved | rejected. Reddedilen içerik RAG'de asla kullanılmaz;
+    # içerik metni değişince (YAML ya da openFDA etiketi güncellenince) yeniden "pending" olur.
+    review_status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector(EMBEDDING_DIM), deferred=True)
     embedding_model: Mapped[str | None] = mapped_column(String(80))
+
+
+REVIEW_STATUSES = ("pending", "approved", "rejected")
+
+
+def set_review(row: EducationContent, status: str, user_id: int | None = None, note: str | None = None) -> None:
+    """Onay durumunu ve geriye dönük `reviewed` alanını birlikte günceller."""
+    if status not in REVIEW_STATUSES:
+        raise ValueError(status)
+    row.review_status = status
+    row.reviewed = status == "approved"
+    row.reviewed_by_user_id = user_id
+    row.reviewed_at = utcnow() if status != "pending" else None
+    row.review_note = note
 
 
 class LlmUsage(Base):

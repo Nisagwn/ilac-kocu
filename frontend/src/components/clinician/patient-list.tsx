@@ -8,7 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 import type { PatientSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
-import { AdherenceBadge } from "./badges";
+import { AdherenceBadge, TrendIndicator } from "./badges";
 import { bandOf, pct, relativeTime } from "./format";
 import { EmptyState, ErrorState, Skeleton } from "./states";
 import { useAsync } from "./use-async";
@@ -158,7 +158,10 @@ export function ClinicianPatientList() {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <AdherenceBadge score={p.adherence_7d} band={p.band} />
+                          <span className="inline-flex items-center gap-1.5">
+                            <AdherenceBadge score={p.adherence_7d} band={p.band} />
+                            <TrendIndicator trend={p.adherence_trend} previous={p.adherence_prev_7d} />
+                          </span>
                         </TableCell>
                         <TableCell>
                           <AdherenceBadge score={p.adherence_30d} band={bandOf(p.adherence_30d)} />

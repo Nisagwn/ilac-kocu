@@ -34,6 +34,47 @@ export interface PatientSummary {
   open_alerts: number;
   critical_alerts: number;
   last_measurement_at: string | null;
+  adherence_prev_7d: number | null;
+  adherence_trend: AdherenceTrend | null;
+}
+
+export type AdherenceTrend = "improving" | "stable" | "worsening";
+
+/** GET /patients/{id}/insights — deterministik klinik özet (teşhis/tedavi önerisi içermez). */
+export interface ClinicalInsights {
+  period_days: number;
+  adherence: { current_7d: number | null; previous_7d: number | null; delta: number | null; trend: AdherenceTrend | null };
+  glucose: { target: string; count: number; time_in_range: number | null; below: number; above: number };
+  blood_pressure: { target: string; count: number; at_target: number | null; below: number; above: number };
+  measurement_frequency: {
+    by_type: Partial<Record<MeasurementType, number>>;
+    per_week: number;
+    days_with_measurement: number;
+    last_measured_at: string | null;
+    days_since_last: number | null;
+  };
+  skip_reasons: { category: string; label: string; count: number }[];
+  missed_by_time_of_day: Record<string, { planned: number; missed: number }>;
+  highlights: string[];
+}
+
+export type ReviewStatus = "pending" | "approved" | "rejected";
+
+export interface EducationItem {
+  id: number;
+  title: string;
+  body: string;
+  source_name: string;
+  source_url: string | null;
+  tags: string | null;
+  kind: "curated" | "openfda";
+  drug_key: string | null;
+  reviewed: boolean;
+  review_status: ReviewStatus;
+  reviewed_at: string | null;
+  review_note: string | null;
+  reviewer_name: string | null;
+  created_at: string;
 }
 
 export interface Schedule {

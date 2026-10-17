@@ -91,6 +91,7 @@ Rol sütunu: P = hasta, H = hekim, B = bakım veren, "Giriş" = giriş yapmış 
 | POST | `/patients/me/caregivers` | P | Bakım veren bağlar (e-posta); 204, tekrar eklemek zararsız | 404 hesap bulunamadı, 403 | M2 |
 | DELETE | `/patients/me/caregivers/{caregiver_user_id}` | P | Bakım veren bağını kaldırır; 204 | 403 | M2 |
 | GET | `/patients/{patient_id}/summary` | Giriş | Haftalık özet (eski yol, geriye uyumluluk için; yeni istemciler `/summaries/{id}`) | 404 | M3 |
+| GET | `/patients/{patient_id}/insights?days=30` | Giriş | Klinik özet: uyum eğilimi (7 gün / önceki 7 gün), hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı, olgusal vurgular ([klinik-icgoruler.md](../M5/klinik-icgoruler.md)) | 404, 422 `days` 7..90 değil | M5 |
 
 ### medications
 
@@ -139,9 +140,12 @@ Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 
 | Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
 |---|---|---|---|---|---|
-| GET | `/education?kind=&tag=` | Giriş | Eğitim içerikleri (`kind`: curated/openfda) | 422 | M4 |
+| GET | `/education?kind=&tag=&review_status=` | Giriş | Eğitim içerikleri (`kind`: curated/openfda; `review_status`: pending/approved/rejected) | 422 | M4 |
+| POST | `/education/{id}/approve` | H | Hekim onayı (gövde isteğe bağlı: `{"note": "..."}`) | 403, 404 | M5 |
+| POST | `/education/{id}/reject` | H | Hekim reddi, not zorunlu (`{"note": "..."}`); içerik RAG'den çıkar | 403, 404, 422 not yok | M5 |
+| POST | `/education/{id}/reset` | H | Kararı geri alır (yeniden onay bekler) | 403, 404 | M5 |
 | GET | `/education/search?q=&k=3&tags=` | Giriş | Anlamsal + anahtar kelime hibrit arama; ilgisiz sorguda boş liste | 422 | M4 |
-| POST | `/education/ingest-drug?name=` | Giriş | openFDA etiketini eğitim içeriğine ekler (aynı etken madde için idempotent); 201 | 404, 422 içerik çıkarılamadı, 503 | M4 |
+| POST | `/education/ingest-drug?name=` | P, H | openFDA etiketini eğitim içeriğine ekler (aynı etken madde için idempotent; hekim onayı bekler); 201 | 403 bakım veren, 404, 422 içerik çıkarılamadı, 503 | M4 |
 
 ### coach
 

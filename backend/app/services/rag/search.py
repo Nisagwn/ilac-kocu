@@ -1,4 +1,6 @@
-"""Eğitim içeriği arama ve embedding bakımı."""
+"""Eğitim içeriği arama ve embedding bakımı.
+
+Hekimin reddettiği içerik (review_status="rejected") aday kümesine hiç girmez: koç onu kaynak gösteremez."""
 
 from __future__ import annotations
 
@@ -69,7 +71,8 @@ def _doc_keys(text: str) -> frozenset[str]:
 def _pg_candidates(db: Session, qvec: list[float], model_id: str, tags: set[str]) -> list[tuple[EducationContent, float]]:
     qparam = cast(bindparam("qv", qvec, type_=Vector(EMBEDDING_DIM)), Vector(EMBEDDING_DIM))
     dist = EducationContent.embedding.op("<=>", return_type=Float)(qparam)
-    stmt = select(EducationContent, dist.label("dist")).where(EducationContent.embedding_model == model_id)
+    stmt = select(EducationContent, dist.label("dist")).where(EducationContent.embedding_model == model_id,
+                                                               EducationContent.review_status != "rejected")
     if tags:
         stmt = stmt.where(or_(*[EducationContent.tags.ilike(f"%{t}%") for t in tags]))
     stmt = stmt.order_by(dist).limit(PG_CANDIDATES)
@@ -78,7 +81,7 @@ def _pg_candidates(db: Session, qvec: list[float], model_id: str, tags: set[str]
 
 def _py_candidates(db: Session, qvec: list[float], provider: EmbeddingProvider,
                    on_the_fly: bool) -> list[tuple[EducationContent, float]]:
-    stmt = select(EducationContent)
+    stmt = select(EducationContent).where(EducationContent.review_status != "rejected")
     if not on_the_fly:
         stmt = stmt.options(undefer(EducationContent.embedding))
     rows = list(db.scalars(stmt))

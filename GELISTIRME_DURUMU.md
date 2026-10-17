@@ -45,24 +45,25 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] DLQ (3 deneme + backoff), DLQ CLI ve metriği
 - [ ] PostgreSQL advisory lock ile lider worker
 - [ ] Worker graceful shutdown
-- [ ] Pazartesi 07:00 zamanlanmış haftalık özet (+ gerekirse migration `0009_weekly_summaries`), hekime bildirim
+- [ ] Pazartesi 07:00 zamanlanmış haftalık özet (+ gerekirse migration `0010_weekly_summaries`), hekime bildirim
 - [ ] Koç kalite değerlendirme seti `tests/coach_eval_scenarios.yaml` + `tests/test_coach_eval.py`
 - [ ] LLM karşılaştırma betiği `backend/scripts/eval_llm_models.py` → `docs/M4/llm-karsilastirma.md` (gerçek API'ye karşı kullanıcı onayıyla koşulacak)
-- [ ] pgvector üzerinde RAG testi (`pytest.mark.postgres`)
+- [ ] pgvector üzerinde RAG testi (`pytest.mark.postgres`) — reddedilen içeriğin `_pg_candidates`'ta elendiği de test edilsin
 - [ ] CI: adım adı ("40 senaryo" kaldır), guardrail testlerinin çift koşmaması, yeni adımlar
 
 ### E — Klinik içgörüler ve eğitim içeriği onayı
-- [ ] `services/clinical_insights.py`: uyum eğilimi, hedef aralıkta kalma oranı, doz atlama nedenleri, ölçüm sıklığı
-- [ ] `GET /patients/{id}/insights`; hasta listesinde eğilim
-- [ ] Hekim arayüzü: liste eğilim oku, detayda "Klinik özet" kartı
-- [ ] Eğitim içeriği onay ekranı `/hekim/egitim`, onay/ret uçları (+ gerekirse migration `0010_education_review`), RAG reddedileni kullanmaz
-- [ ] `POST /education/ingest-drug` bakım verene kapalı
-- [ ] `tests/test_clinical_insights.py`, `tests/test_education_review.py`
+- [x] `services/clinical_insights.py`: uyum eğilimi, hedef aralıkta kalma oranı, doz atlama nedenleri, ölçüm sıklığı
+- [x] `GET /patients/{id}/insights`; hasta listesinde eğilim
+- [x] Hekim arayüzü: liste eğilim oku, detayda "Klinik özet" kartı
+- [x] Eğitim içeriği onay ekranı `/hekim/egitim`, onay/ret uçları (+ gerekirse migration `0009_education_review`), RAG reddedileni kullanmaz
+- [x] `POST /education/ingest-drug` bakım verene kapalı
+- [x] `tests/test_clinical_insights.py`, `tests/test_education_review.py`
 
 ## Sıra ve entegrasyon notları
 1. Paket sırası: **A → B → E → D → C** (C en çok compose/main.py'ye dokunur, en son).
 2. **Migration zinciri** (her paket bir öncekinin üstüne yazar):
-   `0006_security → 0007_drug_catalog → 0008_idempotency → 0009_weekly_summaries (varsa) → 0010_education_review (varsa)`.
+   `0006_security → 0007_drug_catalog → 0008_idempotency → 0009_education_review → 0010_weekly_summaries (D, gerekirse)`.
+   (E, D'den önce yapıldığı için numaralar plana göre yer değiştirdi.)
    Her migration'dan sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head`.
 3. ~~Çakışma beklenen dosyalar~~ (paralel ajan yok; geçersiz).
 4. openFDA çağrısını D'nin circuit breaker'ıyla sar (A'nın `openfda.py`'si üzerine).
@@ -83,3 +84,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - 2026-10-17: Oturum kesildi; worktree dalları push edilmediği için A-E kodu kayboldu. Paketler sırayla, doğrudan `gelistirme` dalında yeniden yazılıyor; her paket sonunda push.
 - 2026-10-17: **A bitti.** 496 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0007_drug_catalog` upgrade/downgrade/upgrade ve seed denendi; tarayıcıda ilaç ekleme (öneri seçimi, listede olmayan ilaç uyarısı, hekim rozeti) doğrulandı.
 - 2026-10-17: **B bitti.** 529 backend testi geçti (gerçek Redis'le Lua testi dahil), ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0008_idempotency` upgrade/downgrade/upgrade denendi. Tarayıcıda: tüm trafik `/v1`'den, ikinci ziyarette 304, doz işaretlemede Idempotency-Key gidiyor, `/health/ready` Redis+DB+migration "ok". Koça mesaj genel istek sınırından muaf (acil yanıt asla engellenmez). Belge: `docs/M2/api-platform.md`.
+- 2026-10-17: **E bitti.** 560 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0009_education_review` upgrade/downgrade/upgrade ve temiz seed denendi (seed artık atlanan dozlara örnek neden yazar; ayrı rastgele üreteç, diğer demo sayıları değişmedi). Tarayıcıda: hasta listesinde eğilim okları, detayda Klinik özet kartı, `/hekim/egitim`'de onay/ret/geri al. Belge: `docs/M5/klinik-icgoruler.md`.

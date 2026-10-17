@@ -36,9 +36,10 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | | `/koc` | Koç sohbeti; acil yanıt kırmızı kart + "112'yi ara", kaynaklar yanıtın altında |
 | | `/ilaclar` | İlaç planı, openFDA bilgi kartı |
 | | `/ozet` | Haftalık özet |
-| Hekim (masaüstü) | `/hekim` | Triyaj listesi: uyum bandı, açık kritik uyarılar |
-| | `/hekim/hasta/[id]` | 30 günlük ölçüm eğrileri, doz takvimi, uyarılar, haftalık özet + anlatı |
+| Hekim (masaüstü) | `/hekim` | Triyaj listesi: uyum bandı ve önceki haftaya göre eğilim oku, açık kritik uyarılar |
+| | `/hekim/hasta/[id]` | Klinik özet kartı (uyum eğilimi, hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı), 30 günlük ölçüm eğrileri, doz takvimi, uyarılar, haftalık özet + anlatı |
 | | `/hekim/uyarilar` | Açık uyarılar, onaylama |
+| | `/hekim/egitim` | Eğitim içeriği onayı: onayla / reddet (not zorunlu) / geri al; reddedilen içerik koçun kaynaklarından çıkar |
 | Bakım veren (salt okunur) | `/yakin`, `/yakin/hasta/[id]` | Bağlı hastanın doz, ölçüm ve özet görünümü |
 
 **Hasta (mobil)**
@@ -156,7 +157,9 @@ Tüm uçlar `/v1` önekiyle yayınlanır (tabloda önek yazılmadı); sürümsü
 | `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba; bakım veren hariç) | tümü |
 | `GET /education` | Eğitim içeriği (RAG korpusu) listesi; `kind=curated\|openfda` süzgeci | giriş yapmış herkes |
 | `GET /education/search?q=` | Anlamsal arama (kosinüs + anahtar kelime), kaynaklı sonuçlar | giriş yapmış herkes |
-| `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır) | giriş yapmış herkes |
+| `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır; hekim onayı bekler) | hasta, hekim |
+| `POST /education/{id}/approve\|reject\|reset` | Eğitim içeriği hekim onayı; reddedilen içerik RAG'de kullanılmaz | hekim |
+| `GET /patients/{id}/insights` | Klinik özet: uyum eğilimi, hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı | okuma |
 | `POST /coach/jobs`, `GET /coach/jobs/{id}` | Koç: acil/doz mesajı anında (200), diğerleri kuyrukta (202 → sorgu); 10/dk | hasta |
 | `POST /coach/chat`, `GET /coach/history` | Koç senkron (test/değerlendirme), sohbet geçmişi | hasta |
 | `GET /metrics` | Prometheus metrikleri (isteğe bağlı `METRICS_TOKEN`); worker: `:9101/metrics` | operasyon |

@@ -4,6 +4,7 @@
 import type {
   Adherence,
   Alert,
+  ClinicalInsights,
   CoachJob,
   CoachMessage,
   CoachReply,
@@ -11,6 +12,7 @@ import type {
   DoseStatus,
   DrugLabel,
   DrugSearchHit,
+  EducationItem,
   Measurement,
   MeasurementCreated,
   MeasurementIn,
@@ -19,6 +21,7 @@ import type {
   MedicationIn,
   Patient,
   PatientSummary,
+  ReviewStatus,
   TodayDose,
   User,
   WeeklySummary,
@@ -78,6 +81,7 @@ export const api = {
   patient: (id: number) => request<Patient>(`/patients/${id}`),
   adherence: (id: number, days = 7) => request<Adherence>(`/patients/${id}/adherence?days=${days}`),
   summary: (id: number) => request<WeeklySummary>(`/patients/${id}/summary`),
+  insights: (id: number, days = 30) => request<ClinicalInsights>(`/patients/${id}/insights?days=${days}`),
 
   medications: (id: number, includeInactive = false) =>
     request<Medication[]>(`/patients/${id}/medications${includeInactive ? "?include_inactive=true" : ""}`),
@@ -113,5 +117,13 @@ export const api = {
 
   searchDrugs: (q: string, init?: RequestInit) =>
     request<DrugSearchHit[]>(`/drugs/search?q=${encodeURIComponent(q)}&limit=8`, init),
+  education: (status?: ReviewStatus) =>
+    request<EducationItem[]>(`/education${status ? `?review_status=${status}` : ""}`),
+  approveEducation: (id: number, note?: string) =>
+    request<EducationItem>(`/education/${id}/approve`, { method: "POST", body: json({ note: note || null }) }),
+  rejectEducation: (id: number, note: string) =>
+    request<EducationItem>(`/education/${id}/reject`, { method: "POST", body: json({ note }) }),
+  resetEducation: (id: number) => request<EducationItem>(`/education/${id}/reset`, { method: "POST" }),
+
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),
 };
