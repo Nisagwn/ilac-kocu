@@ -28,12 +28,15 @@ TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=Fal
 def _isolate_shared_state():
     """İstek sınırı sayaçları ve Redis istemcisi testler arasında taşınmaz."""
     from app.redis_client import reset_redis
+    from app.services.circuit_breaker import reset_breakers
     from app.services.ratelimit import reset_local_limits
 
     reset_local_limits()
     reset_redis(None)
+    reset_breakers()
     yield
     reset_local_limits()
+    reset_breakers()
 
 
 @pytest.fixture()

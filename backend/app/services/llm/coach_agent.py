@@ -23,6 +23,7 @@ from app.config import Settings, get_settings
 from app.models import CoachMessage, Patient, RiskLevel, Sender
 from app.observability import observe_llm
 from app.services import guardrails as gr
+from app.services.circuit_breaker import CircuitOpenError, llm_breaker
 from app.services.coach import WHO_SOURCE, CoachReply, RuleBasedCoach, Source, _is_small_talk
 from app.services.llm import patient_data
 from app.services.llm.budget import UsageTotals, check_budget, record_usage
@@ -261,6 +262,11 @@ class ClaudeCoachProvider:
             # Selam/teşekkür gibi mesajlar LLM'e gitmez: anında yanıt, kota ve maliyet harcanmaz
             return self.fallback.reply(db, patient, message)
         with observe_llm(PURPOSE, self.settings.model_name) as obs:
+            breaker = llm_breaker()
+            if breaker.state == "open":
+                # Sağlayıcı art arda hata veriyor: zaman aşımını beklemeden anında kural tabanlı yanıt
+                obs.outcome = "circuit_open"
+                return self._fallback_reply(db, patient, message)
             decision = check_budget(db, patient.id, PURPOSE, self.settings)
             if not decision.allowed:
                 logger.info("LLM bütçesi aşıldı (%s), kural tabanlı koça düşülüyor", decision.reason)
@@ -271,17 +277,25 @@ class ClaudeCoachProvider:
 
             totals = UsageTotals(model=self.settings.model_name)
             try:
-                reply = self._run(db, patient, message, totals)
+                # Devre kesici yalnızca sağlayıcıya ulaşılamama/sunucu hatalarını sayar; LlmError (ret, şema
+                # dışı çıktı) sağlayıcının yanıt verdiği anlamına gelir ve devreyi açmaz.
+                with breaker.guard(ignore=(LlmError,)):
+                    reply = self._run(db, patient, message, totals)
                 return self._repair_if_blocked(reply, totals)
+            except CircuitOpenError:
+                obs.outcome = "circuit_open"
+                return self._fallback_reply(db, patient, message)
             except Exception as exc:
                 logger.warning("LLM koç başarısız (%s), kural tabanlı koça düşülüyor", type(exc).__name__)
                 obs.outcome = "fallback"
-                base = self.fallback.reply(db, patient, message)
-                return base.model_copy(update={"message": base.message + FALLBACK_NOTE,
-                                               "guardrail_action": "llm_fallback"})
+                return self._fallback_reply(db, patient, message)
             finally:
                 obs.model = totals.model
                 record_usage(db, patient.id, PURPOSE, totals)
+
+    def _fallback_reply(self, db: Session, patient: Patient, message: str) -> CoachReply:
+        base = self.fallback.reply(db, patient, message)
+        return base.model_copy(update={"message": base.message + FALLBACK_NOTE, "guardrail_action": "llm_fallback"})
 
     def _repair_if_blocked(self, reply: CoachReply, totals: UsageTotals) -> CoachReply:
         """Taslak çıktı filtresine takılırsa modelden BİR KEZ yeniden yazmasını ister.
