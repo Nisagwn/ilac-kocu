@@ -11,12 +11,14 @@ from app.schemas import (
     AddCaregiverIn,
     AdherenceOut,
     AssignClinicianIn,
+    ClinicalInsightsOut,
     PatientOut,
     PatientSummaryOut,
     PatientUpdate,
 )
 from app.services import summary as summary_service
 from app.services.adherence import adherence_band
+from app.services.clinical_insights import adherence_trend, compute_insights
 from app.services.coach import get_adherence
 
 router = APIRouter(prefix="/patients", tags=["patients"])
@@ -42,9 +44,11 @@ def list_patients(db: DB, user: CurrentUser):
         patients = [get_own_patient(db, user)]
 
     rows = []
+    now = datetime.now(UTC)
     for p in patients:
-        a7 = get_adherence(db, p.id, 7).score
-        a30 = get_adherence(db, p.id, 30).score
+        trend = adherence_trend(db, p.id, now)
+        a7 = trend["current_7d"]
+        a30 = get_adherence(db, p.id, 30, now=now).score
         open_alerts = db.scalar(
             select(func.count()).select_from(Alert).where(Alert.patient_id == p.id, Alert.acknowledged_at.is_(None))
         )
@@ -57,6 +61,7 @@ def list_patients(db: DB, user: CurrentUser):
         rows.append(PatientSummaryOut(
             id=p.id, full_name=p.user.full_name, adherence_7d=a7, adherence_30d=a30, band=adherence_band(a7),
             open_alerts=open_alerts or 0, critical_alerts=critical or 0, last_measurement_at=last_m,
+            adherence_prev_7d=trend["previous_7d"], adherence_trend=trend["trend"],
         ))
     # Önce kritik uyarısı olanlar, sonra uyumu düşük olanlar
     rows.sort(key=lambda r: (-r.critical_alerts, r.adherence_7d if r.adherence_7d is not None else 2))
@@ -124,6 +129,14 @@ def patient_adherence(patient_id: int, db: DB, user: CurrentUser, days: Annotate
         score=r.score, percent=r.percent, band=adherence_band(r.score), by_medication=r.by_medication,
         missed_dates=r.missed_dates,
     )
+
+
+@router.get("/{patient_id}/insights", response_model=ClinicalInsightsOut)
+def patient_insights(patient_id: int, db: DB, user: CurrentUser, days: Annotated[int, Query(ge=7, le=90)] = 30):
+    """Klinik özet: uyum eğilimi (7 gün / önceki 7 gün), hedef aralıkta kalma oranı, doz atlama nedenleri,
+    ölçüm sıklığı ve olgusal vurgular. Deterministiktir; teşhis ya da tedavi önerisi içermez."""
+    get_patient_for_read(db, user, patient_id)
+    return compute_insights(db, patient_id, days).as_dict()
 
 
 @router.put("/me/clinician", response_model=PatientOut)

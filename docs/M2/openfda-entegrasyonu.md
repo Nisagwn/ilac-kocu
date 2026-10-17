@@ -1,6 +1,6 @@
 # openFDA Entegrasyonu (M2)
 
-Spec: "openFDA'dan ilaç etiketi çeken uç nokta". Uç nokta: `GET /drugs/label?name=<ilaç adı>`. Kod: `backend/app/routers/drugs.py` (HTTP katmanı), `backend/app/services/openfda.py` (istemci, eşleme, önbellek), `backend/app/services/rag/ingest.py` (eğitim içeriğine ekleme). Testler: `backend/tests/test_api.py` (`test_openfda_parse_with_mock_transport`, `test_openfda_not_found`, `test_drug_label_endpoint`).
+Spec: "openFDA'dan ilaç etiketi çeken uç nokta". Uç nokta: `GET /drugs/label?name=<ilaç adı>`. Kod: `backend/app/routers/drugs.py` (HTTP katmanı), `backend/app/services/openfda.py` (istemci, eşleme, önbellek), `backend/app/services/rag/ingest.py` (eğitim içeriğine ekleme). Testler: `backend/tests/test_api.py` (`test_openfda_parse_with_mock_transport`, `test_openfda_not_found`, `test_drug_label_endpoint`), `backend/tests/test_drug_catalog.py` (katalog, senkron, arama, doğrulama).
 
 İstek/yanıt örneği ve sıra diyagramı: [api-referansi.md](api-referansi.md) §5.6 ve §6.2.
 
@@ -34,35 +34,17 @@ Spec: "openFDA'dan ilaç etiketi çeken uç nokta". Uç nokta: `GET /drugs/label
 
 Metin alanları (`indications`, `warnings`, `drug_interactions`) birden çok paragraf olabilir; birleştirilir ve her biri en çok **1200 karaktere** kesilir (`MAX_FIELD_CHARS`, kesilirse sonuna `…` eklenir). Bölüm yoksa alan `null` olur.
 
-## 3. Türkiye ticari ismi → etken madde eşlemesi
+## 3. Türkiye ticari ismi → etken madde eşlemesi ve ilaç kataloğu
 
-openFDA yalnızca ABD etiketlerini içerir; Türkiye'deki ticari isimler (Glifor, Delix...) orada bulunmaz. Bu yüzden küçük, elle kürate edilmiş bir tablo kullanılır (`TR_BRAND_TO_GENERIC`, anahtarlar normalize edilmiş):
+openFDA yalnızca ABD etiketlerini içerir; Türkiye'deki ticari isimler (Glifor, Delix...) orada bulunmaz. Eşleme, elle kürate edilmiş katalogdan gelir: `backend/app/data/drug_catalog_tr.yaml` (46 etken madde, 53 TR ticari adı; diyabet, hipertansiyon ve eşlik eden statin/antiagregan). Her kayıt etken madde, grup (`diabetes | hypertension | other`), openFDA EPC sınıfı ve ticari adları taşır.
 
-| Ticari isim | Etken madde | Grup |
-|---|---|---|
-| glifor | metformin | Diyabet |
-| glucophage | metformin | Diyabet |
-| matofin | metformin | Diyabet |
-| diaformin | metformin | Diyabet |
-| amaryl | glimepiride | Diyabet |
-| diamicron | gliclazide | Diyabet |
-| januvia | sitagliptin | Diyabet |
-| galvus | vildagliptin | Diyabet |
-| jardiance | empagliflozin | Diyabet |
-| forziga | dapagliflozin | Diyabet |
-| norvasc | amlodipine | Hipertansiyon |
-| coversyl | perindopril | Hipertansiyon |
-| delix | ramipril | Hipertansiyon |
-| beloc | metoprolol | Hipertansiyon |
-| concor | bisoprolol | Hipertansiyon |
-| micardis | telmisartan | Hipertansiyon |
-| diovan | valsartan | Hipertansiyon |
-| atacand | candesartan | Hipertansiyon |
-| lasix | furosemide | Hipertansiyon / diüretik |
-| lipitor | atorvastatin | Lipid (eşlik eden) |
-| ator | atorvastatin | Lipid (eşlik eden) |
+- `resolve_generic` (`services/openfda.py`) bu dosyadan beslenir. Ad normalize edilir (Türkçe karakter ve büyük/küçük harf duyarsız), doz ve tuz ekleri atılır: "GLİFOR 1000 mg" → metformin, "Metformin HCl" → metformin, "Lantus SoloStar" → insulin glargine. Listede olmayan ad etken madde varsayılarak doğrudan aranır; bulunamazsa 404.
+- Aynı liste `drug_catalog` tablosuna yüklenir (migration `0007_drug_catalog`; `python -m app.seed` ya da `python -m app.services.drug_catalog curated`; tablo boşsa ilk aramada da yüklenir).
+- `python -m app.services.drug_catalog openfda`: openFDA `count=openfda.generic_name.exact` sorgusuyla diyabet/hipertansiyon EPC sınıflarındaki etken maddeleri (kombinasyonlar hariç) kataloğa ekler ve etiket sayılarını günceller; kürate kayıtların adları/grupları korunur.
+- `GET /drugs/search?q=`: katalogda arama. Sıralama: ticari ad başlangıcı → etken madde başlangıcı → kelime başlangıcı → içinde geçme; kürate kayıtlar ve etiket sayısı çok olanlar önce.
+- İlaç eklenirken (`POST /patients/{id}/medications`) aramadan seçilen kaydın `catalog_id`'si gönderilir; ad katalogla birebir eşleşirse de bağlanır. Katalogda olmayan ilaç `verified=false` kaydedilir: hasta formunda uyarı, hekim panelinde "Doğrulanmadı" rozeti görünür. Ad değişince doğrulama yeniden hesaplanır.
 
-Tablo "Grup" sütunu bu belgede okunabilirlik için eklenmiştir, kodda yoktur. Tabloda olmayan ad, etken madde varsayılarak doğrudan aranır; bulunamazsa 404 döner. Yeni ilaç eklemek için `TR_BRAND_TO_GENERIC` sözlüğüne bir satır eklenir. Eşleme klinisyence gözden geçirilmelidir.
+Liste demo amaçlıdır; üretimde TİTCK ilaç listesiyle doğrulanmalı ve klinisyence gözden geçirilmelidir. Doz bilgisi katalogda bilinçli olarak tutulmaz.
 
 ## 4. Hata yönetimi
 

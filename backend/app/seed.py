@@ -6,7 +6,8 @@ Oluşturulan hesaplar (şifre: demo12345):
   yakin@demo.local     — bakım veren (salt okunur)
   + hekime atanmış 4 sentetik hasta (farklı uyum/risk profilleri; hekim panelini anlamlı kılmak için)
 
-Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir.
+Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir;
+kürate ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada etken maddeye göre upsert edilir.
 """
 
 import random
@@ -33,11 +34,18 @@ from app.models import (
     Role,
     Severity,
     User,
+    set_review,
 )
 from app.security import hash_password
+from app.services.drug_catalog import match_exact, upsert_curated
 from app.services.rag.search import ensure_embeddings
 
 PW = "demo12345"
+
+# Atlanan dozlara hastanın yazdığı örnek nedenler (hekim panelindeki "doz atlama nedenleri" için).
+# Ayrı rastgele üreteçle seçilir: ana demo verisinin (doz/ölçüm) sayıları değişmez.
+SKIP_REASONS = [None, None, "Unuttum", "unuttum", "Akşam dışarıdaydım", "Midem bulandı", "İlacım bitti",
+                "Uyuyakaldım", "İyi hissediyordum"]
 
 EDUCATION_YAML = Path(__file__).parent / "data" / "education.yaml"
 
@@ -71,11 +79,15 @@ def seed_education(db: Session, path: Path = EDUCATION_YAML) -> tuple[int, int]:
             "source_name": it["source_name"],
             "source_url": it.get("source_url"),
             "tags": it.get("tags"),
-            "reviewed": bool(it.get("reviewed", False)),
         }
+        # YAML'daki `reviewed: true` yalnızca yeni ya da metni değişen içeriğe uygulanır: hekimin panelden
+        # verdiği onay/ret kararı yeniden seed'de ezilmez.
+        yaml_status = "approved" if it.get("reviewed", False) else "pending"
         row = existing.get(it["title"])
         if row is None:
-            db.add(EducationContent(title=it["title"], kind="curated", **values))
+            row = EducationContent(title=it["title"], kind="curated", **values)
+            set_review(row, yaml_status)
+            db.add(row)
             created += 1
         elif any(getattr(row, k) != v for k, v in values.items()):
             text_changed = (row.body, row.tags) != (values["body"], values["tags"])
@@ -83,6 +95,7 @@ def seed_education(db: Session, path: Path = EDUCATION_YAML) -> tuple[int, int]:
                 setattr(row, k, v)
             if text_changed:
                 row.embedding_model = None  # yeniden embed edilsin
+                set_review(row, yaml_status)  # metin değişti: önceki onay geçersiz
             updated += 1
     db.flush()
     ensure_embeddings(db)
@@ -94,6 +107,8 @@ def run() -> None:
     db = SessionLocal()
     created, updated = seed_education(db)
     print(f"Eğitim içeriği: {created} eklendi, {updated} güncellendi.")
+    created, updated = upsert_curated(db)
+    print(f"İlaç kataloğu: {created} eklendi, {updated} güncellendi.")
     if db.scalar(select(User).where(User.email == "hasta@demo.local")):
         print("Demo verisi zaten var.")
         return
@@ -141,6 +156,15 @@ def run() -> None:
 
     for profile in EXTRA_PATIENTS:
         _add_extra_patient(db, rnd, doc.id, today, **profile)
+
+    db.flush()  # autoflush kapalı: eklenen doz kayıtları sorguda görünsün
+    reason_rnd = random.Random(7)
+    for log in db.scalars(select(DoseLog).where(DoseLog.status == DoseStatus.skipped)):
+        log.reason = reason_rnd.choice(SKIP_REASONS)
+
+    for med in db.scalars(select(Medication)):  # demo ilaçları katalogdaki karşılıklarına bağlanır
+        row = match_exact(db, med.name)
+        med.catalog_id, med.verified = (row.id, True) if row else (None, False)
 
     db.commit()
     print("Demo verisi oluşturuldu. Şifre:", PW)

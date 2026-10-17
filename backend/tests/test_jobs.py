@@ -10,6 +10,7 @@ from datetime import timedelta
 
 from fastapi.testclient import TestClient
 
+from app.config import get_settings
 from app.models import Alert, CoachJob, CoachMessage, Patient, utcnow
 from app.redis_client import reset_redis
 from app.services import jobs
@@ -184,7 +185,8 @@ def test_stale_running_job_is_requeued_then_closed(client, db, patient):
 
     # Deneme hakkı bitmişse kural tabanlı yanıtla kapatılır (kullanıcı askıda kalmaz)
     job = db.get(CoachJob, job_id)
-    job.status, job.started_at, job.attempts = jobs.RUNNING, utcnow() - timedelta(minutes=30), 2
+    job.status, job.started_at = jobs.RUNNING, utcnow() - timedelta(minutes=30)
+    job.attempts = get_settings().coach_job_max_attempts
     db.commit()
     jobs.recover_stale_jobs(db, fake)
     job = db.get(CoachJob, job_id, populate_existing=True)

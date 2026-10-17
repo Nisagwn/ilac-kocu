@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { CircleCheck, Plus, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Medication, MedicationIn } from "@/lib/types";
+import type { DrugSearchHit, Medication, MedicationIn } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { DrugCombobox } from "./drug-combobox";
 import { WEEKDAYS, hhmm } from "./utils";
 
 const ALL_DAYS = "1234567";
@@ -36,6 +37,10 @@ export function MedicationForm({
   const [doseText, setDoseText] = useState(medication?.dose_text ?? "");
   const [ingredient, setIngredient] = useState(medication?.active_ingredient ?? "");
   const [notes, setNotes] = useState(medication?.notes ?? "");
+  // Katalogdan seçilen kayıt; ad elle değiştirilince bağlantı kalkar (sunucu birebir ad eşleşmesini yine dener)
+  const [catalog, setCatalog] = useState<{ id: number; generic: string } | null>(() =>
+    medication?.catalog_id ? { id: medication.catalog_id, generic: medication.active_ingredient ?? "" } : null,
+  );
   const [times, setTimes] = useState<string[]>(() => {
     const t = [...new Set(medication?.schedules.map((s) => hhmm(s.time_of_day)) ?? [])].sort();
     return t.length ? t : ["08:00"];
@@ -43,6 +48,12 @@ export function MedicationForm({
   const [days, setDays] = useState(() => initialDays(medication));
   const [localError, setLocalError] = useState<string | null>(null);
   const mixedDays = medication ? new Set(medication.schedules.map((s) => s.days_of_week)).size > 1 : false;
+
+  function pickDrug(hit: DrugSearchHit) {
+    setName(hit.brand ?? hit.generic_name);
+    setIngredient(hit.generic_name);
+    setCatalog({ id: hit.id, generic: hit.generic_name });
+  }
 
   function toggleDay(d: string) {
     setDays((cur) => (cur.includes(d) ? cur.replace(d, "") : [...cur, d].sort().join("")));
@@ -60,6 +71,7 @@ export function MedicationForm({
       dose_text: doseText.trim() || null,
       active_ingredient: ingredient.trim() || null,
       notes: notes.trim() || null,
+      catalog_id: catalog?.id ?? null,
       schedules: cleanTimes.map((t) => ({ time_of_day: t, days_of_week: days })),
     });
   }
@@ -69,7 +81,26 @@ export function MedicationForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor={`${idp}-name`}>İlaç adı *</Label>
-          <Input id={`${idp}-name`} className="h-10" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="ör. Glifor" required />
+          <DrugCombobox
+            id={`${idp}-name`}
+            value={name}
+            onChange={(v) => {
+              setName(v);
+              setCatalog(null);
+            }}
+            onSelect={pickDrug}
+          />
+          {catalog ? (
+            <p className="flex items-center gap-1 text-xs text-teal-800">
+              <CircleCheck className="size-3.5" aria-hidden /> Listeden seçildi{catalog.generic ? ` · ${catalog.generic}` : ""}
+            </p>
+          ) : (
+            name.trim().length >= 2 && (
+              <p className="flex items-center gap-1 text-xs text-amber-700">
+                <TriangleAlert className="size-3.5" aria-hidden /> Listeden seçmezseniz de kaydedebilirsiniz; listede yoksa hekiminiz kontrol eder.
+              </p>
+            )
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idp}-dose`}>Doz (hekiminizin yazdığı)</Label>

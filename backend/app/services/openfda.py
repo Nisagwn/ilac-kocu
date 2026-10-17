@@ -1,7 +1,8 @@
 """openFDA Drug Label API istemcisi.
 
 openFDA ABD etiketlerini döndürür; Türkiye'deki ticari isimler bulunmaz. Bu yüzden önce
-TR ticari isim -> etken madde eşlemesi yapılır, sorgu etken madde (generic_name) üzerinden atılır.
+TR ticari isim -> etken madde eşlemesi yapılır (kürate katalog: app/data/drug_catalog_tr.yaml),
+sorgu etken madde (generic_name) üzerinden atılır.
 """
 
 import json
@@ -11,32 +12,8 @@ import httpx
 
 from app.config import get_settings
 from app.redis_client import get_redis
-from app.services.guardrails import normalize
-
-# Küçük, kürate eşleme tablosu (genişletilebilir). Anahtarlar normalize edilmiş.
-TR_BRAND_TO_GENERIC = {
-    "glifor": "metformin",
-    "glucophage": "metformin",
-    "matofin": "metformin",
-    "diaformin": "metformin",
-    "amaryl": "glimepiride",
-    "diamicron": "gliclazide",
-    "januvia": "sitagliptin",
-    "galvus": "vildagliptin",
-    "jardiance": "empagliflozin",
-    "forziga": "dapagliflozin",
-    "norvasc": "amlodipine",
-    "coversyl": "perindopril",
-    "delix": "ramipril",
-    "beloc": "metoprolol",
-    "concor": "bisoprolol",
-    "micardis": "telmisartan",
-    "diovan": "valsartan",
-    "atacand": "candesartan",
-    "lasix": "furosemide",
-    "lipitor": "atorvastatin",
-    "ator": "atorvastatin",
-}
+from app.services.circuit_breaker import CircuitOpenError, get_breaker
+from app.services.drug_catalog import brand_to_generic, canonical_generic
 
 MAX_FIELD_CHARS = 1200
 CACHE_TTL_SECONDS = 24 * 3600
@@ -53,8 +30,15 @@ class OpenFDAUnavailable(Exception):
 
 
 def resolve_generic(name: str) -> str:
-    key = normalize(name).split()[0] if name.strip() else ""
-    return TR_BRAND_TO_GENERIC.get(key, key)
+    """TR ticari ad / etken madde -> openFDA sorgusunda kullanılacak etken madde.
+
+    Eşleme kürate katalogdan (app/data/drug_catalog_tr.yaml) gelir; doz ve tuz ekleri yok sayılır
+    ("Glifor 1000 mg" -> metformin, "Metformin HCl" -> metformin). Bilinmeyen ad olduğu gibi (sadeleştirilmiş) döner."""
+    key = canonical_generic(name)
+    if not key:
+        return ""
+    mapping = brand_to_generic()
+    return mapping.get(key) or mapping.get(key.split()[0]) or key
 
 
 def _first(label: dict, field: str) -> str | None:
@@ -95,8 +79,17 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
 
     own_client = client is None
     client = client or httpx.Client(timeout=10)
-    try:
+
+    def _get() -> httpx.Response:
         resp = client.get(settings.openfda_base_url, params=params)
+        if resp.status_code >= 500 or resp.status_code == 429:  # devre kesiciye hata olarak sayılır
+            raise OpenFDAUnavailable(f"openFDA HTTP {resp.status_code}")
+        return resp
+
+    try:
+        resp = get_breaker("openfda").call(_get)
+    except CircuitOpenError as e:  # openFDA art arda hata verdi: bir süre istek atılmaz
+        raise OpenFDAUnavailable(str(e)) from e
     except httpx.HTTPError as e:
         raise OpenFDAUnavailable(str(e)) from e
     finally:

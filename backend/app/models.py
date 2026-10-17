@@ -127,11 +127,35 @@ class Medication(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # İlaç kataloğundan seçildiyse (ya da ad katalogla birebir eşleştiyse) verified=True; değilse hekim kontrol eder
+    catalog_id: Mapped[int | None] = mapped_column(ForeignKey("drug_catalog.id", ondelete="SET NULL"), index=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
     patient: Mapped[Patient] = relationship(back_populates="medications")
+    catalog: Mapped["DrugCatalog | None"] = relationship()
     schedules: Mapped[list["MedicationSchedule"]] = relationship(
         back_populates="medication", cascade="all, delete-orphan"
     )
+
+
+class DrugCatalog(Base):
+    """İlaç kataloğu: etken madde başına bir satır (openFDA generic_name, küçük harf, tuz eki atılmış).
+
+    Kaynak: kürate TR ticari ad listesi (app/data/drug_catalog_tr.yaml) ve openFDA `count` senkronu
+    (app/services/drug_catalog.py). `search_text`: Türkçe karakter duyarsız arama için normalize metin.
+    """
+
+    __tablename__ = "drug_catalog"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    generic_name: Mapped[str] = mapped_column(String(160), unique=True)
+    brand_names: Mapped[list] = mapped_column(JSON, default=list)  # TR ticari adlar (görüntülenen haliyle)
+    indication_group: Mapped[str] = mapped_column(String(20), default="other")  # diabetes | hypertension | other
+    pharm_class: Mapped[str | None] = mapped_column(String(160))  # openFDA EPC sınıfı
+    source: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
+    label_count: Mapped[int | None] = mapped_column(Integer)  # openFDA'daki etiket sayısı (senkrondan)
+    search_text: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MedicationSchedule(Base):
@@ -237,9 +261,29 @@ class EducationContent(Base):
     # M4 RAG (migration 0003_rag): PostgreSQL'de pgvector vector(384), SQLite'ta JSON
     kind: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
     drug_key: Mapped[str | None] = mapped_column(String(80), unique=True, index=True)  # openfda: etken madde
-    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # klinisyen gözden geçirmesi yapıldı mı
+    reviewed: Mapped[bool] = mapped_column(Boolean, default=False)  # = review_status == "approved" (geriye dönük)
+    # Hekim onayı (migration 0009): pending | approved | rejected. Reddedilen içerik RAG'de asla kullanılmaz;
+    # içerik metni değişince (YAML ya da openFDA etiketi güncellenince) yeniden "pending" olur.
+    review_status: Mapped[str] = mapped_column(String(10), default="pending", index=True)
+    reviewed_by_user_id: Mapped[int | None] = mapped_column(ForeignKey("users.id", ondelete="SET NULL"))
+    reviewed_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    review_note: Mapped[str | None] = mapped_column(Text)
     embedding: Mapped[list[float] | None] = mapped_column(EmbeddingVector(EMBEDDING_DIM), deferred=True)
     embedding_model: Mapped[str | None] = mapped_column(String(80))
+
+
+REVIEW_STATUSES = ("pending", "approved", "rejected")
+
+
+def set_review(row: EducationContent, status: str, user_id: int | None = None, note: str | None = None) -> None:
+    """Onay durumunu ve geriye dönük `reviewed` alanını birlikte günceller."""
+    if status not in REVIEW_STATUSES:
+        raise ValueError(status)
+    row.review_status = status
+    row.reviewed = status == "approved"
+    row.reviewed_by_user_id = user_id
+    row.reviewed_at = utcnow() if status != "pending" else None
+    row.review_note = note
 
 
 class LlmUsage(Base):
@@ -281,6 +325,28 @@ class CoachJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # DLQ (migration 0010): tüm denemeler tükenince iş "ölü mektup" olur; mesaj DLQ_RETENTION_DAYS boyunca
+    # yeniden deneme için tutulur. last_error yalnızca hata türüdür (içerik yok).
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_error: Mapped[str | None] = mapped_column(String(80))
+
+
+class WeeklySummary(Base):
+    """Zamanlanmış haftalık özet (Pazartesi 07:00, lider işçi; app/services/weekly_reports.py).
+
+    `payload`: services/summary.weekly_summary çıktısı (sayısal özet + anlatı). Hasta başına dönem başına bir satır.
+    """
+
+    __tablename__ = "weekly_summaries"
+    __table_args__ = (UniqueConstraint("patient_id", "period_start", name="uq_weekly_summary_period"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), index=True)
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)
+    payload: Mapped[dict] = mapped_column(JSON)
+    narrative_source: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class RefreshToken(Base):
@@ -318,3 +384,26 @@ class AccessLog(Base):
     action: Mapped[str] = mapped_column(String(20))  # read | write
     path: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IdempotencyKey(Base):
+    """Idempotency-Key ile gelen yazma isteklerinin sonucu (app/services/idempotency.py).
+
+    Aynı kullanıcı aynı anahtarla aynı isteği tekrarlarsa işlem yeniden yapılmaz, saklanan yanıt döner.
+    `status_code` NULL: istek hâlâ işleniyor. Yanıt gövdesi sağlık verisi içerebilir: kayıtlar
+    IDEMPOTENCY_TTL_HOURS sonra silinir, kullanıcı silinince de silinir.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_user_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(255))
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(255))
+    request_hash: Mapped[str] = mapped_column(String(64))  # yöntem + yol + gövdenin SHA-256 özeti
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[str | None] = mapped_column(Text)
+    response_headers: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

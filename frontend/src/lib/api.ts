@@ -4,12 +4,15 @@
 import type {
   Adherence,
   Alert,
+  ClinicalInsights,
   CoachJob,
   CoachMessage,
   CoachReply,
   DoseLog,
   DoseStatus,
   DrugLabel,
+  DrugSearchHit,
+  EducationItem,
   Measurement,
   MeasurementCreated,
   MeasurementIn,
@@ -18,6 +21,7 @@ import type {
   MedicationIn,
   Patient,
   PatientSummary,
+  ReviewStatus,
   TodayDose,
   User,
   WeeklySummary,
@@ -38,17 +42,31 @@ function detailToMessage(detail: unknown): string {
   return "Beklenmeyen bir hata oluştu";
 }
 
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Yazma isteklerine benzersiz Idempotency-Key: ağ hatasında tekrar gönderilen istek iki kez işlenmez. */
+function idempotencyKey(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (WRITE_METHODS.has(method)) headers["Idempotency-Key"] = idempotencyKey();
   const res = await fetch(`/api/proxy${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init.headers },
+    headers: { ...headers, ...init.headers },
   });
   if (res.status === 401 && typeof window !== "undefined") {
     window.location.href = "/giris";
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, detailToMessage(body.detail));
+    const retryAfter = res.status === 429 ? res.headers.get("retry-after") : null;
+    const msg = detailToMessage(body.detail);
+    throw new ApiError(res.status, retryAfter ? `${msg} (${retryAfter} sn sonra)` : msg);
   }
   if (res.status === 204) return undefined as T;
   return res.json();
@@ -63,6 +81,7 @@ export const api = {
   patient: (id: number) => request<Patient>(`/patients/${id}`),
   adherence: (id: number, days = 7) => request<Adherence>(`/patients/${id}/adherence?days=${days}`),
   summary: (id: number) => request<WeeklySummary>(`/patients/${id}/summary`),
+  insights: (id: number, days = 30) => request<ClinicalInsights>(`/patients/${id}/insights?days=${days}`),
 
   medications: (id: number, includeInactive = false) =>
     request<Medication[]>(`/patients/${id}/medications${includeInactive ? "?include_inactive=true" : ""}`),
@@ -95,6 +114,16 @@ export const api = {
   createCoachJob: (message: string) => request<CoachJob>("/coach/jobs", { method: "POST", body: json({ message }) }),
   coachJob: (jobId: string) => request<CoachJob>(`/coach/jobs/${encodeURIComponent(jobId)}`),
   chatHistory: (limit = 50) => request<CoachMessage[]>(`/coach/history?limit=${limit}`),
+
+  searchDrugs: (q: string, init?: RequestInit) =>
+    request<DrugSearchHit[]>(`/drugs/search?q=${encodeURIComponent(q)}&limit=8`, init),
+  education: (status?: ReviewStatus) =>
+    request<EducationItem[]>(`/education${status ? `?review_status=${status}` : ""}`),
+  approveEducation: (id: number, note?: string) =>
+    request<EducationItem>(`/education/${id}/approve`, { method: "POST", body: json({ note: note || null }) }),
+  rejectEducation: (id: number, note: string) =>
+    request<EducationItem>(`/education/${id}/reject`, { method: "POST", body: json({ note }) }),
+  resetEducation: (id: number) => request<EducationItem>(`/education/${id}/reset`, { method: "POST" }),
 
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),
 };

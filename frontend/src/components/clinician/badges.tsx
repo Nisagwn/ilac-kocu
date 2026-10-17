@@ -1,6 +1,6 @@
-import { Eye, Info, OctagonAlert, TriangleAlert } from "lucide-react";
+import { ArrowDownRight, ArrowRight, ArrowUpRight, Eye, Info, OctagonAlert, TriangleAlert } from "lucide-react";
 import { Badge } from "@/components/ui/badge";
-import type { Band, Severity } from "@/lib/types";
+import type { AdherenceTrend, Band, Severity } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { BAND_CLASS, BAND_LABEL, SEVERITY_LABEL, pct } from "./format";
 
@@ -31,6 +31,39 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
     <Badge variant="outline" className={SEVERITY_CLASS[severity]}>
       <Icon aria-hidden />
       {SEVERITY_LABEL[severity]}
+    </Badge>
+  );
+}
+
+const TREND = {
+  improving: { Icon: ArrowUpRight, label: "arttı", className: "text-emerald-700" },
+  stable: { Icon: ArrowRight, label: "değişmedi", className: "text-muted-foreground" },
+  worsening: { Icon: ArrowDownRight, label: "düştü", className: "text-red-700" },
+} as const;
+
+/** 7 günlük uyumun önceki 7 güne göre yönü (±10 puan eşiği backend'de: services/clinical_insights.py). */
+export function TrendIndicator({ trend, previous }: { trend: AdherenceTrend | null; previous: number | null }) {
+  if (!trend) return null;
+  const { Icon, label, className } = TREND[trend];
+  const text = `Önceki 7 güne göre ${label}${previous !== null ? ` (önceki: ${pct(previous)})` : ""}`;
+  return (
+    <span className={cn("inline-flex items-center", className)} title={text}>
+      <Icon className="size-4" aria-hidden />
+      <span className="sr-only">{text}</span>
+    </span>
+  );
+}
+
+/** İlaç kataloğunda olmayan (hastanın elle yazdığı) ilaç: hekim adı ve etken maddeyi kontrol etmeli. */
+export function UnverifiedDrugBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="ml-1 border-amber-200 bg-amber-50 text-amber-800"
+      title="İlaç katalogda bulunamadı; adı ve etken maddeyi kontrol edin"
+    >
+      <TriangleAlert aria-hidden />
+      Doğrulanmadı
     </Badge>
   );
 }

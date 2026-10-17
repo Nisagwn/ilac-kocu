@@ -2,6 +2,8 @@
 import type { NextResponse } from "next/server";
 
 export const API_URL = process.env.API_URL ?? "http://localhost:8000";
+/** Sürümlü API kökü: tüm backend çağrıları buradan (sürümsüz eski yollar yalnızca geriye dönük). */
+export const API_BASE = `${API_URL}/v1`;
 export const TOKEN_COOKIE = "ik_token";
 export const REFRESH_COOKIE = "ik_refresh";
 export const ROLE_COOKIE = "ik_role";
@@ -68,7 +70,7 @@ export function refreshTokens(refreshToken: string): Promise<TokenPair | null> {
   for (const [k, v] of inflight) if (now - v.at > REUSE_MS) inflight.delete(k);
   const hit = inflight.get(refreshToken);
   if (hit) return hit.promise;
-  const promise = fetch(`${API_URL}/auth/refresh`, {
+  const promise = fetch(`${API_BASE}/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refreshToken }),

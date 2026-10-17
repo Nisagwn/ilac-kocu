@@ -1,4 +1,5 @@
-from collections.abc import Generator
+from collections.abc import Generator, Iterator
+from contextlib import contextmanager
 
 from sqlalchemy import create_engine
 from sqlalchemy.orm import DeclarativeBase, Session, sessionmaker
@@ -20,3 +21,19 @@ def get_db() -> Generator[Session, None, None]:
         yield db
     finally:
         db.close()
+
+
+@contextmanager
+def middleware_session(app) -> Iterator[Session]:
+    """Middleware'ler için oturum. Rotalar gibi `get_db` bağımlılık geçersiz kılmasına (testler) uyar:
+    geçersiz kılma hazır bir Session döndürüyorsa o kullanılır ve kapatılmaz."""
+    provider = getattr(app, "dependency_overrides", {}).get(get_db, get_db)
+    made = provider()
+    if isinstance(made, Session):
+        yield made
+        return
+    db = next(made)
+    try:
+        yield db
+    finally:
+        made.close()

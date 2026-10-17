@@ -26,6 +26,7 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | M3 — Arayüz ve dashboard (MVP) | 11 Ara 2026 | ✅ `frontend/` (Next.js PWA), web push + hatırlatma zamanlayıcısı, 102 backend testi |
 | M4 — Yapay zekâ bileşeni | 1 Oca 2027 | ✅ Claude tool-use koç, RAG (pgvector), maliyet limiti, 232 senaryoluk guardrail seti, 469 backend testi |
 | M5 — Final teslim | 17 Oca 2027 | ✅ rapor, kurulum, demo senaryosu (`docs/M5/`) — video kayıt bekliyor |
+| Geliştirme turu (`gelistirme` dalı) | 17 Eki 2026 | ✅ ilaç kataloğu, API platform katmanı (`/v1`), klinik içgörüler + eğitim onayı, dayanıklılık (devre kesici, DLQ, lider işçi), nginx + 3 kopya + gözlemlenebilirlik, yük testi; 611 backend testi ([`GELISTIRME_DURUMU.md`](GELISTIRME_DURUMU.md)) |
 
 ## Ekranlar
 
@@ -36,9 +37,10 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | | `/koc` | Koç sohbeti; acil yanıt kırmızı kart + "112'yi ara", kaynaklar yanıtın altında |
 | | `/ilaclar` | İlaç planı, openFDA bilgi kartı |
 | | `/ozet` | Haftalık özet |
-| Hekim (masaüstü) | `/hekim` | Triyaj listesi: uyum bandı, açık kritik uyarılar |
-| | `/hekim/hasta/[id]` | 30 günlük ölçüm eğrileri, doz takvimi, uyarılar, haftalık özet + anlatı |
+| Hekim (masaüstü) | `/hekim` | Triyaj listesi: uyum bandı ve önceki haftaya göre eğilim oku, açık kritik uyarılar |
+| | `/hekim/hasta/[id]` | Klinik özet kartı (uyum eğilimi, hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı), 30 günlük ölçüm eğrileri, doz takvimi, uyarılar, haftalık özet + anlatı |
 | | `/hekim/uyarilar` | Açık uyarılar, onaylama |
+| | `/hekim/egitim` | Eğitim içeriği onayı: onayla / reddet (not zorunlu) / geri al; reddedilen içerik koçun kaynaklarından çıkar |
 | Bakım veren (salt okunur) | `/yakin`, `/yakin/hasta/[id]` | Bağlı hastanın doz, ölçüm ve özet görünümü |
 
 **Hasta (mobil)**
@@ -77,14 +79,15 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 
 ```bash
 cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
-docker compose up --build                     # PostgreSQL + pgvector, Redis, API, web — migration otomatik
+docker compose up --build                     # PostgreSQL + pgvector, Redis, API×3 + nginx, işçi, web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
 
 | Adres | |
 |---|---|
 | http://localhost:3000 | Uygulama (PWA) |
-| http://localhost:8000/docs | Swagger / OpenAPI |
+| http://localhost:8000/docs | Swagger / OpenAPI (nginx yük dengeleyici üzerinden) |
+| `docker compose --profile observability up -d` | + Prometheus :9090, Grafana :3001, Jaeger :16686 ([`infra/README.md`](infra/README.md)) |
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
@@ -95,7 +98,7 @@ Windows / macOS / Linux adım adım kurulum, Docker'sız geliştirme ve sorun gi
 
 ![Mimari şeması](docs/gorseller/12-mimari.png)
 
-Uzun ve zamanlanmış işler ayrı bir **worker** serviste çalışır; API yalnızca istekleri karşılar. Redis kuyruk, istek sınırı, token iptali ve önbellek için ortak katmandır. Ayrıntı: [docs/M1/05-mimari.md](docs/M1/05-mimari.md).
+API, **nginx** yük dengeleyicinin arkasında birden çok kopya (varsayılan 3) olarak çalışır; durum veritabanı ve Redis'tedir, kopyalar arasında paylaşılan bellek yoktur. Uzun ve zamanlanmış işler ayrı **worker** serviste çalışır; zamanlanmış işler yalnızca lider işçide (PostgreSQL advisory lock). Redis kuyruk, istek sınırı (token bucket), devre kesici durumu, token iptali ve önbellek için ortak katmandır. Ayrıntı: [docs/M1/05-mimari.md](docs/M1/05-mimari.md), [infra/README.md](infra/README.md).
 
 ```mermaid
 flowchart LR
@@ -104,13 +107,17 @@ flowchart LR
         SW["Service Worker<br/>push · offline kabuk"]
     end
     PX["Next.js sunucusu<br/>/api/proxy · httpOnly çerez"]
-    subgraph B["FastAPI"]
+    NG["nginx<br/>yük dengeleme · IP sınırı<br/>güvenlik başlıkları"]
+    subgraph B["FastAPI × 3 (/v1)"]
         RB["JWT + roller<br/>yetkisiz → 404"]
         GR["Guardrail<br/>girdi · çıktı"]
         CO["Koç<br/>Claude tool-use<br/>↘ kural tabanlı yedek"]
         AD["Uyum skoru<br/>deterministik"]
         RG["RAG"]
-        SC["APScheduler<br/>+ pywebpush"]
+    end
+    subgraph W["Worker (lider)"]
+        SC["APScheduler: hatırlatma,<br/>haftalık özet, temizlik"]
+        Q["Koç kuyruğu<br/>yeniden deneme · DLQ"]
     end
     DB[("PostgreSQL<br/>+ pgvector")]
     RD[("Redis")]
@@ -118,16 +125,47 @@ flowchart LR
     FDA["openFDA"]
     WP["Push servisi"]
 
-    PWA --> PX --> RB
+    PWA --> PX --> NG --> RB
     RB --> GR --> CO
     CO <--> LLM
     CO -->|tool| AD & RG
     AD & RG & RB --> DB
     RB --> FDA -.önbellek.-> RD
     SC --> WP --> SW
+    RD --> Q --> CO
 ```
 
-Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-mimari.md) · Veri modeli: [`docs/er-diyagrami.md`](docs/er-diyagrami.md)
+Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-mimari.md) · Altyapı (nginx, kopyalar, gözlemlenebilirlik): [`infra/README.md`](infra/README.md)
+
+### Veri modeli (ER)
+
+İlişkiler aşağıda; tüm sütunlar ve kısıtlar: [`docs/er-diyagrami.md`](docs/er-diyagrami.md).
+
+```mermaid
+erDiagram
+    users ||--o| patients : "hasta profili"
+    users ||--o| clinicians : "hekim profili"
+    clinicians ||--o{ patients : "takip eder"
+    patients ||--o{ patient_caregivers : ""
+    users ||--o{ patient_caregivers : "bakım veren"
+    patients ||--o{ medications : ""
+    drug_catalog |o--o{ medications : "katalog eşleşmesi"
+    medications ||--o{ medication_schedules : ""
+    medication_schedules ||--o{ dose_logs : ""
+    medication_schedules ||--o{ reminder_logs : ""
+    patients ||--o{ dose_logs : ""
+    patients ||--o{ measurements : ""
+    patients ||--o{ coach_messages : ""
+    patients ||--o{ coach_jobs : ""
+    patients ||--o{ alerts : ""
+    patients ||--o{ weekly_summaries : ""
+    patients ||--o{ llm_usage : ""
+    patients ||--o{ access_logs : "erişilen"
+    users ||--o{ push_subscriptions : ""
+    users ||--o{ refresh_tokens : ""
+    users ||--o{ idempotency_keys : ""
+    users |o--o{ education_contents : "onaylayan hekim"
+```
 
 | Katman | Teknoloji |
 |---|---|
@@ -137,6 +175,8 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 | Altyapı | PostgreSQL 16 + pgvector, Redis, Docker Compose, GitHub Actions |
 
 ## API özeti
+
+Tüm uçlar `/v1` önekiyle yayınlanır (tabloda önek yazılmadı); sürümsüz eski yollar geriye dönük çalışır ve `Deprecation` başlığı taşır. Platform: token bucket istek sınırı (`X-RateLimit-*`, 429 + `Retry-After`), yazma isteklerinde `Idempotency-Key`, GET'te `ETag`/304, listelerde `limit` + `cursor` sayfalama, `/health/live` ve `/health/ready`. Ayrıntı: [docs/M2/api-platform.md](docs/M2/api-platform.md).
 
 | Uç nokta | Açıklama | Rol |
 |---|---|---|
@@ -150,10 +190,13 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 | `GET /patients/{id}/doses/today`, `PUT /patients/{id}/doses` | Bugün ekranı, "aldım/almadım" | hasta yazar |
 | `/patients/{id}/measurements` | Kan şekeri / tansiyon; eşik dışı değer → uyarı | hasta yazar |
 | `GET /alerts`, `POST /alerts/{id}/ack` | Hekimin açık uyarıları | hekim |
-| `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba) | tümü |
+| `GET /drugs/search?q=gli` | İlaç kataloğu araması (TR ticari ad / etken madde); ilaç formunda otomatik tamamlama | tümü |
+| `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba; bakım veren hariç) | tümü |
 | `GET /education` | Eğitim içeriği (RAG korpusu) listesi; `kind=curated\|openfda` süzgeci | giriş yapmış herkes |
 | `GET /education/search?q=` | Anlamsal arama (kosinüs + anahtar kelime), kaynaklı sonuçlar | giriş yapmış herkes |
-| `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır) | giriş yapmış herkes |
+| `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır; hekim onayı bekler) | hasta, hekim |
+| `POST /education/{id}/approve\|reject\|reset` | Eğitim içeriği hekim onayı; reddedilen içerik RAG'de kullanılmaz | hekim |
+| `GET /patients/{id}/insights` | Klinik özet: uyum eğilimi, hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı | okuma |
 | `POST /coach/jobs`, `GET /coach/jobs/{id}` | Koç: acil/doz mesajı anında (200), diğerleri kuyrukta (202 → sorgu); 10/dk | hasta |
 | `POST /coach/chat`, `GET /coach/history` | Koç senkron (test/değerlendirme), sohbet geçmişi | hasta |
 | `GET /metrics` | Prometheus metrikleri (isteğe bağlı `METRICS_TOKEN`); worker: `:9101/metrics` | operasyon |
@@ -214,25 +257,36 @@ Etik değerlendirme ve zarar senaryoları: [final rapor §11](docs/M5/final-rapo
 ## Testler ve CI
 
 ```bash
-cd backend && pytest -q && ruff check app tests                 # SQLite bellek içi, gerçek LLM çağrısı yok
+cd backend && pytest -q && ruff check app tests scripts         # SQLite bellek içi, gerçek LLM çağrısı yok
+# gerçek altyapı testleri (yoksa atlanır): Lua token bucket, ortak devre kesici, pgvector, advisory lock
+REDIS_TEST_URL=redis://localhost:6379/15 TEST_DATABASE_URL=postgresql+psycopg://ilac:ilac@localhost:5433/ilac_kocu pytest -q
 cd frontend && npm run lint && npx tsc --noEmit && npm run build
 ```
 
 ```
 backend/tests/
 ├── guardrail_scenarios.yaml  232 red-team senaryosu (beklenen eylemle)
+├── coach_eval_scenarios.yaml koç kalite seti: veriye dayalılık, doğru kaynak, eskalasyon, kapsam
 ├── test_guardrails.py        senaryo seti (parametrik) + çıktı doğrulayıcı
+├── test_coach_eval.py        kalite seti (kural tabanlı koç tüm ölçütleri geçmeli) + model karşılaştırma betiği
 ├── test_adherence.py         uyum skoru (spec örneği: 7 günde 3 kaçırılmış doz)
 ├── test_api.py               auth, CRUD, rol bazlı erişim (404), koç, openFDA (mock)
 ├── test_coach_llm.py         Claude tool döngüsü, grounding, bütçe, yedek (sahte istemci)
 ├── test_rag.py               embedding, arama, seed, openFDA ingest, /education uçları
+├── test_rag_postgres.py      pgvector yolu (PostgreSQL gerekir)
 ├── test_summary_llm.py       haftalık anlatı: LLM, önbellek, şablon yedeği
-└── test_push.py              VAPID abonelik, hatırlatma zamanlayıcısı
+├── test_push.py              VAPID abonelik, hatırlatma zamanlayıcısı
+├── test_drug_catalog.py      ilaç kataloğu, openFDA senkronu, arama, doğrulama
+├── test_platform.py          /v1, token bucket, Idempotency-Key, ETag, cursor sayfalama, sağlık uçları
+├── test_clinical_insights.py klinik özet: eğilim, hedef aralıkta kalma, atlama nedenleri
+├── test_education_review.py  eğitim içeriği hekim onayı, RAG'in reddedileni kullanmaması
+├── test_resilience.py        devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış haftalık özet
+└── test_tracing.py           OpenTelemetry: varsayılan kapalı, span'lerde kimlik/sorgu/IP yok
 ```
 
-**Toplam 469 backend testi** geçer (parametrik senaryolar dahil); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live` (API anahtarı gerekir).
+**Toplam 611 backend testi** geçer (parametrik senaryolar dahil; gerçek Redis/PostgreSQL ile hiçbiri atlanmaz); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live`; modelleri kalite setiyle karşılaştırmak için `python -m scripts.eval_llm_models --live --models ...` (API anahtarı gerekir, ücretli; sonuç [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md)).
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → koç kalite seti → diğer testler, Redis ve PostgreSQL servisleriyle → tek migration head kontrolü → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
 
 ## Belgeler
 
@@ -248,16 +302,22 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → gua
 | [`docs/er-diyagrami.md`](docs/er-diyagrami.md) | ER diyagramı |
 | **M2** | |
 | [`docs/M2/README.md`](docs/M2/README.md) | M2 teslim belgeleri |
+| [`docs/M2/api-platform.md`](docs/M2/api-platform.md) | `/v1` sürümleme, token bucket, Idempotency-Key, ETag, cursor sayfalama, sağlık uçları |
 | **M3** | |
 | [`docs/M3/README.md`](docs/M3/README.md) | M3 teslim belgeleri |
 | **M4** | |
 | [`docs/M4/guardrail-raporu.md`](docs/M4/guardrail-raporu.md) | 232 senaryoluk guardrail test raporu (kategori dağılımı, recall, yanlış pozitif) |
 | [`docs/M4/uyum-skoru-dogrulama.md`](docs/M4/uyum-skoru-dogrulama.md) | Uyum skoru elle doğrulaması (3 hata bulundu ve düzeltildi) |
+| [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md) | Koç kalite setiyle LLM model karşılaştırması (betikle üretilir) |
 | **M5** | |
 | [`docs/M5/final-rapor.md`](docs/M5/final-rapor.md) | Final rapor: mimari, yapay zekâ, guardrail sonuçları, gizlilik, **etik/güvenlik değerlendirmesi**, **sınırlılıklar** |
 | [`docs/M5/kurulum.md`](docs/M5/kurulum.md) | Kurulum talimatı (Windows / macOS / Linux) |
 | [`docs/M5/demo-senaryosu.md`](docs/M5/demo-senaryosu.md) | Demo videosu senaryosu ve kayıt kontrol listesi |
 | [`docs/M5/etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md) | Değerlendirme ölçütü → kanıt eşlemesi |
+| [`docs/M5/klinik-icgoruler.md`](docs/M5/klinik-icgoruler.md) | Hekim klinik özeti ve eğitim içeriği onayı |
+| [`docs/yuk-testi.md`](docs/yuk-testi.md) | Yük testi: 1 ve 3 API kopyası, kopya durdurma, istek sınırı (ölçülmüş sonuçlar) |
+| [`infra/README.md`](infra/README.md) | nginx, kopyalar, düzgün kapanma, Prometheus/Grafana/Jaeger, k6 |
+| [`docs/M5/dayaniklilik.md`](docs/M5/dayaniklilik.md) | Devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış işler, yapay zekâ değerlendirmesi |
 | Demo videosu | <!-- KULLANICI: kayıttan sonra video bağlantısını buraya yazın --> *(henüz yüklenmedi)* |
 
 ## Sınırlılıklar

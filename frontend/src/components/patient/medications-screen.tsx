@@ -1,7 +1,7 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Clock, Pencil, Pill, Plus, PowerOff, RotateCcw } from "lucide-react";
+import { Clock, Pencil, Pill, Plus, PowerOff, RotateCcw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
@@ -132,6 +132,11 @@ export function MedicationsScreen({ patientId }: { patientId: number }) {
                       </p>
                       {m.active_ingredient && <p className="text-sm text-muted-foreground">Etken madde: {m.active_ingredient}</p>}
                       {m.notes && <p className="text-sm text-muted-foreground">{m.notes}</p>}
+                      {!m.verified && (
+                        <p className="mt-1 flex items-center gap-1 text-xs text-amber-700">
+                          <TriangleAlert className="size-3.5" aria-hidden /> İlaç listemizde yok; hekiminiz kontrol edecek.
+                        </p>
+                      )}
                     </div>
                   </div>
                   {m.schedules.length > 0 ? (

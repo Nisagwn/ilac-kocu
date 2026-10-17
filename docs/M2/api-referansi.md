@@ -4,6 +4,8 @@ FastAPI uygulaması (`backend/app/main.py`). Etkileşimli belge: **Swagger UI** 
 
 Sütun "Kilometre taşı": uç noktanın hangi aşamada eklendiği. **M2** çekirdek CRUD'dur; diğerleri sonradan eklendi.
 
+> **Sürüm:** tüm uçlar `/v1` önekiyle yayınlanır (ör. `/v1/patients/{id}/measurements`). Aşağıdaki tablolarda önek kısalık için yazılmamıştır. Sürümsüz eski yollar geriye dönük çalışır, şemada görünmez ve `Deprecation: true` + `Link: </v1/...>; rel="successor-version"` başlıklarını taşır. Sağlık ve metrik uçları (`/health*`, `/metrics`) sürümsüzdür. Platform davranışları (istek sınırı, idempotency, ETag, sayfalama): [api-platform.md](api-platform.md).
+
 ## 1. Kimlik doğrulama akışı
 
 1. `POST /auth/register` ile hesap açılır (hasta için `consent: true` zorunlu).
@@ -89,6 +91,7 @@ Rol sütunu: P = hasta, H = hekim, B = bakım veren, "Giriş" = giriş yapmış 
 | POST | `/patients/me/caregivers` | P | Bakım veren bağlar (e-posta); 204, tekrar eklemek zararsız | 404 hesap bulunamadı, 403 | M2 |
 | DELETE | `/patients/me/caregivers/{caregiver_user_id}` | P | Bakım veren bağını kaldırır; 204 | 403 | M2 |
 | GET | `/patients/{patient_id}/summary` | Giriş | Haftalık özet (eski yol, geriye uyumluluk için; yeni istemciler `/summaries/{id}`) | 404 | M3 |
+| GET | `/patients/{patient_id}/insights?days=30` | Giriş | Klinik özet: uyum eğilimi (7 gün / önceki 7 gün), hedef aralıkta kalma, doz atlama nedenleri, ölçüm sıklığı, olgusal vurgular ([klinik-icgoruler.md](../M5/klinik-icgoruler.md)) | 404, 422 `days` 7..90 değil | M5 |
 
 ### medications
 
@@ -128,7 +131,8 @@ Rol sütunu: P = hasta, H = hekim, B = bakım veren, "Giriş" = giriş yapmış 
 
 | Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
 |---|---|---|---|---|---|
-| GET | `/drugs/label?name=` | Giriş | İlaç adından (TR ticari isim veya etken madde) openFDA etiket özeti; sonucu eğitim içeriğine de ekler | 404 etiket yok, 503 openFDA yanıt vermiyor, 422 ad uzunluğu | M2 |
+| GET | `/drugs/search?q=&limit=` | Giriş | İlaç kataloğunda arama (TR ticari ad / etken madde, Türkçe karakter duyarsız); ilaç formundaki otomatik tamamlama | 422 sorgu 2..80 karakter değil | M5 |
+| GET | `/drugs/label?name=` | Giriş | İlaç adından (TR ticari isim veya etken madde) openFDA etiket özeti; sonucu eğitim içeriğine de ekler (bakım veren istekleri hariç) | 404 etiket yok, 503 openFDA yanıt vermiyor, 422 ad uzunluğu | M2 |
 
 Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 
@@ -136,9 +140,12 @@ Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 
 | Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
 |---|---|---|---|---|---|
-| GET | `/education?kind=&tag=` | Giriş | Eğitim içerikleri (`kind`: curated/openfda) | 422 | M4 |
+| GET | `/education?kind=&tag=&review_status=` | Giriş | Eğitim içerikleri (`kind`: curated/openfda; `review_status`: pending/approved/rejected) | 422 | M4 |
+| POST | `/education/{id}/approve` | H | Hekim onayı (gövde isteğe bağlı: `{"note": "..."}`) | 403, 404 | M5 |
+| POST | `/education/{id}/reject` | H | Hekim reddi, not zorunlu (`{"note": "..."}`); içerik RAG'den çıkar | 403, 404, 422 not yok | M5 |
+| POST | `/education/{id}/reset` | H | Kararı geri alır (yeniden onay bekler) | 403, 404 | M5 |
 | GET | `/education/search?q=&k=3&tags=` | Giriş | Anlamsal + anahtar kelime hibrit arama; ilgisiz sorguda boş liste | 422 | M4 |
-| POST | `/education/ingest-drug?name=` | Giriş | openFDA etiketini eğitim içeriğine ekler (aynı etken madde için idempotent); 201 | 404, 422 içerik çıkarılamadı, 503 | M4 |
+| POST | `/education/ingest-drug?name=` | P, H | openFDA etiketini eğitim içeriğine ekler (aynı etken madde için idempotent; hekim onayı bekler); 201 | 403 bakım veren, 404, 422 içerik çıkarılamadı, 503 | M4 |
 
 ### coach
 
@@ -166,7 +173,17 @@ Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 
 | Metot | Yol | Rol | Açıklama | Kilometre taşı |
 |---|---|---|---|---|
-| GET | `/health` | herkese açık | `{"status":"ok"}` | M2 |
+| GET | `/health` | herkese açık | `{"status":"ok"}` (eski canlılık ucu) | M2 |
+| GET | `/health/live` | herkese açık | Süreç ayakta: `{"status":"ok"}` | M5 |
+| GET | `/health/ready` | herkese açık | Veritabanı, Redis (tanımlıysa) ve şema (alembic head) kontrolü; biri bozuksa 503 + bileşen durumu | M5 |
+
+### collections (spec yolları)
+
+| Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
+|---|---|---|---|---|---|
+| GET | `/medications?patient_id=` | P, H, B | Hasta-merkezli yolun düz karşılığı; hasta için `patient_id` isteğe bağlı | 404 yetkisiz/bilinmeyen hasta, 422 hekim/bakım veren `patient_id` vermedi | M5 |
+| GET | `/doses?patient_id=&limit=&cursor=` | P, H, B | Aynı | aynı | M5 |
+| GET | `/measurements?patient_id=&type=&limit=&cursor=` | P, H, B | Aynı | aynı | M5 |
 
 ## 5. Örnek istek ve yanıtlar
 

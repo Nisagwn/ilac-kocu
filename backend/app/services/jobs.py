@@ -12,7 +12,14 @@ Akış:
 Redis yoksa (testler, Docker'sız geliştirme) iş aynı süreçte FastAPI BackgroundTask ile işlenir;
 istemci açısından davranış aynıdır (202 + yoklama).
 
-Gizlilik: loglara mesaj içeriği yazılmaz; iş bitince `CoachJob.message` temizlenir.
+Yeniden deneme ve DLQ: provider aşaması ve kural tabanlı yedek de hata verirse (ör. veritabanı kesintisi)
+iş yeniden "queued" olur ve üstel beklemeyle (taban * 2^(deneme-1), en çok COACH_JOB_RETRY_MAX_SECONDS)
+Redis "coach:jobs:delayed" sıralı kümesine konur; işçi vadesi gelenleri kuyruğa taşır. COACH_JOB_MAX_ATTEMPTS
+(3) deneme sonunda iş "failed" + `dead_lettered_at` ile ölü mektup kuyruğuna (DLQ) düşer; yönetimi:
+`python -m app.services.dlq` (app/services/dlq.py).
+
+Gizlilik: loglara mesaj içeriği yazılmaz; iş bitince `CoachJob.message` temizlenir (DLQ'daki iş hariç:
+yeniden denenebilmesi için mesaj DLQ_RETENTION_DAYS boyunca tutulur, sonra `dlq purge` siler).
 """
 
 import logging
@@ -39,7 +46,17 @@ from app.services.coach import (
 logger = logging.getLogger(__name__)
 
 QUEUE_KEY = "coach:jobs"
+DELAYED_KEY = "coach:jobs:delayed"  # sıralı küme: üye = iş kimliği, skor = hazır olacağı unix zamanı
 
+# Vadesi gelen gecikmeli işleri kuyruğa atomik taşır (birden çok işçi aynı işi iki kez taşımaz)
+PROMOTE_LUA = """
+local ids = redis.call('ZRANGEBYSCORE', KEYS[1], '-inf', ARGV[1], 'LIMIT', 0, 100)
+for _, id in ipairs(ids) do
+  redis.call('ZREM', KEYS[1], id)
+  redis.call('LPUSH', KEYS[2], id)
+end
+return #ids
+"""
 QUEUED = "queued"
 RUNNING = "running"
 DONE = "done"
@@ -103,6 +120,26 @@ def enqueue_job(redis, job_id: str) -> bool:
     except Exception as exc:
         logger.warning("Koç işi kuyruğa eklenemedi (%s)", type(exc).__name__)
         return False
+
+
+def retry_delay(attempts: int, settings: Settings | None = None) -> float:
+    s = settings or get_settings()
+    return min(s.coach_job_retry_max_seconds, s.coach_job_retry_base_seconds * 2 ** max(0, attempts - 1))
+
+
+def schedule_retry(redis, job_id: str, delay: float, now: float | None = None) -> bool:
+    """İşi `delay` saniye sonra yeniden kuyruğa alınmak üzere gecikmeli kümeye ekler."""
+    try:
+        redis.zadd(DELAYED_KEY, {job_id: (now if now is not None else time.time()) + delay})
+        return True
+    except Exception as exc:
+        logger.warning("Koç işi %s yeniden deneme için zamanlanamadı (%s)", job_id, type(exc).__name__)
+        return False
+
+
+def promote_due(redis, now: float | None = None) -> int:
+    """Vadesi gelen gecikmeli işleri kuyruğa taşır; taşınan iş sayısını döner."""
+    return int(redis.eval(PROMOTE_LUA, 2, DELAYED_KEY, QUEUE_KEY, now if now is not None else time.time()))
 
 
 def dequeue_job(redis, timeout: int = 5) -> str | None:
@@ -175,8 +212,7 @@ def process_job(db: Session, job_id: str, provider: CoachProvider | None = None)
             reply = run_provider_stage(db, patient, message, _FallbackProvider(), commit=False)
         except Exception as exc2:
             db.rollback()
-            logger.error("Koç işi %s başarısız (%s)", job_id, type(exc2).__name__)
-            return _finish(db, job_id, FAILED, error=FAILED_MESSAGE)
+            return record_attempt_failure(db, job_id, type(exc2).__name__)
     # Koç yanıtı kaydı ile iş durumu aynı işlemde commit edilir (yarım kalmış iş olmaz)
     job = _finish(db, job_id, DONE, reply=reply)
     logger.info("Koç işi %s tamamlandı (%.1f sn, guardrail=%s)", job_id, time.monotonic() - started,
@@ -184,11 +220,39 @@ def process_job(db: Session, job_id: str, provider: CoachProvider | None = None)
     return job
 
 
+def record_attempt_failure(db: Session, job_id: str, error_type: str,
+                           settings: Settings | None = None) -> CoachJob | None:
+    """Başarısız denemeyi işler: hak kaldıysa iş yeniden "queued" olur (çağıran gecikmeli yeniden denemeyi
+    zamanlar), kalmadıysa "failed" + DLQ. Mesaj DLQ'da yeniden deneme için tutulur."""
+    s = settings or get_settings()
+    job = db.get(CoachJob, job_id, populate_existing=True)
+    if job is None:
+        return None
+    job.last_error = error_type[:80]
+    if job.attempts < s.coach_job_max_attempts:
+        job.status, job.started_at = QUEUED, None
+        db.commit()
+        logger.warning("Koç işi %s başarısız (%s), deneme %s/%s; yeniden denenecek", job_id, error_type,
+                       job.attempts, s.coach_job_max_attempts)
+        return job
+    job.status, job.error, job.finished_at, job.dead_lettered_at = FAILED, FAILED_MESSAGE, utcnow(), utcnow()
+    db.commit()
+    from app.services.dlq import DEAD_LETTERED
+
+    DEAD_LETTERED.inc()
+    logger.error("Koç işi %s %s denemeden sonra DLQ'ya alındı (%s)", job_id, job.attempts, error_type)
+    return job
+
+
 def run_job_inline(bind, job_id: str, provider: CoachProvider | None = None) -> None:
-    """Redis yokken BackgroundTask olarak çalışır; istekten bağımsız kendi oturumunu açar."""
+    """Redis yokken BackgroundTask olarak çalışır; istekten bağımsız kendi oturumunu açar.
+    Yeniden denemeler aynı görevde beklemeyle yapılır."""
     db = sessionmaker(bind=bind, autoflush=False, expire_on_commit=False)()
     try:
-        process_job(db, job_id, provider)
+        job = process_job(db, job_id, provider)
+        while job is not None and job.status == QUEUED:
+            time.sleep(retry_delay(job.attempts))
+            job = process_job(db, job_id, provider)
     except Exception:
         logger.exception("Süreç içi koç işi %s başarısız", job_id)
         db.rollback()

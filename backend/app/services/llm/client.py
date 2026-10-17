@@ -6,6 +6,7 @@
 from functools import lru_cache
 
 from app.config import Settings
+from app.services.circuit_breaker import CircuitOpenError, get_breaker
 
 # Güvenlik sınıflandırıcısı isteği reddederse sunucu tarafında önerilen yedek modelle tekrar dener
 SERVER_FALLBACK_BETA = "server-side-fallback-2026-07-01"
@@ -35,7 +36,18 @@ def get_client(settings: Settings):
 
 def create_message(client, settings: Settings, **kwargs):
     """messages.create; Anthropic'te yapılandırmaya göre sunucu tarafı yedek model (fallbacks) ve effort ekler.
-    OpenRouter adaptörü Anthropic'e özgü alanları kendisi yok sayar."""
+    OpenRouter adaptörü Anthropic'e özgü alanları kendisi yok sayar.
+
+    Çağrı "llm" devre kesicisinden geçer: sağlayıcı art arda hata verirse bir süre hiç istek atılmaz ve
+    CircuitOpenError (bir LlmError) fırlar; koç ve anlatı bunu yakalayıp kural tabanlı yanıta düşer."""
+    breaker = get_breaker("llm")
+    try:
+        return breaker.call(lambda: _create_message(client, settings, **kwargs))
+    except CircuitOpenError as exc:
+        raise LlmError(str(exc)) from exc
+
+
+def _create_message(client, settings: Settings, **kwargs):
     if settings.llm_backend == "openrouter":
         kwargs.setdefault("model", settings.model_name)
         kwargs.setdefault("max_tokens", settings.llm_max_tokens)

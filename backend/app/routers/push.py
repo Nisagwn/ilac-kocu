@@ -1,4 +1,5 @@
-"""Web push abonelikleri (yalnızca hasta). Hatırlatmalar: app/services/reminders.py"""
+"""Web push abonelikleri. Hasta: doz hatırlatmaları (app/services/reminders.py). Hekim: haftalık özet
+bildirimi (app/services/weekly_reports.py). Bakım veren salt okunurdur, bildirim almaz."""
 
 from typing import Annotated
 
@@ -13,7 +14,7 @@ from app.services.push import PushSender, send_to_user, webpush_sender
 
 router = APIRouter(prefix="/push", tags=["push"])
 
-PatientUser = Annotated[User, Depends(require_roles(Role.patient))]
+PushUser = Annotated[User, Depends(require_roles(Role.patient, Role.clinician))]
 
 
 def _not_configured() -> HTTPException:
@@ -28,7 +29,7 @@ def get_push_sender() -> PushSender:
 
 
 @router.get("/vapid-public-key", response_model=VapidKeyOut)
-def vapid_public_key(user: PatientUser):
+def vapid_public_key(user: PushUser):
     key = get_settings().vapid_public_key
     if not key:
         raise _not_configured()
@@ -36,7 +37,7 @@ def vapid_public_key(user: PatientUser):
 
 
 @router.post("/subscribe", status_code=status.HTTP_204_NO_CONTENT)
-def subscribe(data: PushSubscribeIn, db: DB, user: PatientUser):
+def subscribe(data: PushSubscribeIn, db: DB, user: PushUser):
     """Tarayıcı aboneliğini kaydeder; aynı endpoint varsa günceller (upsert)."""
     sub = db.scalar(select(PushSubscription).where(PushSubscription.endpoint == data.endpoint))
     if sub is None:
@@ -49,7 +50,7 @@ def subscribe(data: PushSubscribeIn, db: DB, user: PatientUser):
 
 
 @router.delete("/subscribe", status_code=status.HTTP_204_NO_CONTENT)
-def unsubscribe(data: PushUnsubscribeIn, db: DB, user: PatientUser):
+def unsubscribe(data: PushUnsubscribeIn, db: DB, user: PushUser):
     sub = db.scalar(
         select(PushSubscription).where(PushSubscription.endpoint == data.endpoint, PushSubscription.user_id == user.id)
     )
@@ -59,10 +60,14 @@ def unsubscribe(data: PushUnsubscribeIn, db: DB, user: PatientUser):
 
 
 @router.post("/test", response_model=PushTestOut)
-def send_test(db: DB, user: PatientUser, sender: Annotated[PushSender, Depends(get_push_sender)]):
+def send_test(db: DB, user: PushUser, sender: Annotated[PushSender, Depends(get_push_sender)]):
     """Kullanıcının aboneliklerine deneme bildirimi yollar."""
-    payload = {"title": "İlaç Koçu", "body": "Bildirimler açık. Doz saatlerinde hatırlatma alacaksınız.",
-               "url": "/bugun"}
+    if user.role == Role.clinician:
+        payload = {"title": "İlaç Koçu", "body": "Bildirimler açık. Haftalık hasta özetleri hazır olunca haber vereceğiz.",
+                   "url": "/hekim"}
+    else:
+        payload = {"title": "İlaç Koçu", "body": "Bildirimler açık. Doz saatlerinde hatırlatma alacaksınız.",
+                   "url": "/bugun"}
     sent = send_to_user(db, user.id, payload, sender)
     db.commit()
     return PushTestOut(sent=sent)

@@ -81,6 +81,34 @@ class PatientSummaryOut(BaseModel):
     open_alerts: int
     critical_alerts: int
     last_measurement_at: datetime | None
+    adherence_prev_7d: float | None = Field(default=None, description="Önceki 7 gün (8-14. gün) uyum skoru")
+    adherence_trend: str | None = Field(default=None, description="improving | stable | worsening | null (veri yok)")
+
+
+class AdherenceTrendOut(BaseModel):
+    current_7d: float | None
+    previous_7d: float | None
+    delta: float | None
+    trend: str | None
+
+
+class SkipReasonOut(BaseModel):
+    category: str
+    label: str
+    count: int
+
+
+class ClinicalInsightsOut(BaseModel):
+    """Hekim için klinik özet (deterministik; teşhis ya da tedavi önerisi içermez)."""
+
+    period_days: int
+    adherence: AdherenceTrendOut
+    glucose: dict
+    blood_pressure: dict
+    measurement_frequency: dict
+    skip_reasons: list[SkipReasonOut]
+    missed_by_time_of_day: dict
+    highlights: list[str]
 
 
 # ---------- Medications ----------
@@ -106,6 +134,7 @@ class MedicationIn(BaseModel):
     active_ingredient: str | None = None
     dose_text: str | None = Field(default=None, max_length=120, description="Hekimin yazdığı doz, ör. '1000 mg'")
     notes: str | None = None
+    catalog_id: int | None = Field(default=None, description="GET /drugs/search sonucundan seçilen katalog kaydı")
     schedules: list[ScheduleIn] = Field(default_factory=list)
 
 
@@ -115,6 +144,7 @@ class MedicationUpdate(BaseModel):
     dose_text: str | None = None
     notes: str | None = None
     active: bool | None = None
+    catalog_id: int | None = None
     schedules: list[ScheduleIn] | None = None
 
 
@@ -126,7 +156,20 @@ class MedicationOut(ORM):
     dose_text: str | None
     notes: str | None
     active: bool
+    catalog_id: int | None
+    verified: bool = Field(description="İlaç katalogda var mı (yoksa hekim kontrol etmeli)")
     schedules: list[ScheduleOut]
+
+
+class DrugSearchHit(BaseModel):
+    id: int
+    generic_name: str
+    brand: str | None = Field(description="Sorguyla eşleşen TR ticari adı; etken madde eşleşmesinde boş")
+    display_name: str
+    brand_names: list[str]
+    indication_group: str
+    pharm_class: str | None
+    source: str
 
 
 # ---------- Doses ----------
