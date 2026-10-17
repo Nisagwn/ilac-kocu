@@ -15,33 +15,33 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 ## İş paketleri (paralel ajanlar, her biri ayrı git worktree dalında)
 
 ### A — openFDA ilaç kataloğu ve seçimi
-- [ ] `drug_catalog` tablosu + migration `0007_drug_catalog`; `medications.catalog_id`, `medications.verified`
-- [ ] openFDA `count` ile katalog senkronu (diyabet/hipertansiyon EPC sınıfları) + CLI
-- [ ] Kürate TR ticari ad kataloğu `backend/app/data/drug_catalog_tr.yaml` (~60), `resolve_generic` buradan beslenir
-- [ ] `GET /drugs/search?q=` (TR ad / generic, Türkçe karakter duyarsız)
+- [x] `drug_catalog` tablosu + migration `0007_drug_catalog`; `medications.catalog_id`, `medications.verified`
+- [x] openFDA `count` ile katalog senkronu (diyabet/hipertansiyon EPC sınıfları) + CLI
+- [x] Kürate TR ticari ad kataloğu `backend/app/data/drug_catalog_tr.yaml` (~60), `resolve_generic` buradan beslenir
+- [x] `GET /drugs/search?q=` (TR ad / generic, Türkçe karakter duyarsız)
 - [ ] İlaç formunda otomatik tamamlamalı seçim; "listede yok" → `verified=false` + uyarı; hekim detayında rozet
-- [ ] Bakım veren rolünde `/drugs/label` eğitim içeriğine yazmaz
+- [x] Bakım veren rolünde `/drugs/label` eğitim içeriğine yazmaz
 - [ ] `tests/test_drug_catalog.py`
 
 ### B — API platform katmanı
-- [ ] `/v1` sürümleme (eski yollar geriye dönük, gizli/deprecated); frontend `/v1` kullanır
-- [ ] Spec yolları: `GET /v1/medications|doses|measurements?patient_id=` (yetkisiz → 404)
-- [ ] Token bucket rate limit (Redis + Lua), `X-RateLimit-*`, `Retry-After`
-- [ ] Idempotency-Key + `idempotency_keys` tablosu (migration `0008_idempotency`); frontend anahtar üretir
-- [ ] ETag / 304, `Cache-Control: private, no-cache`
-- [ ] Cursor sayfalama (ölçüm, doz, uyarı, koç mesajı)
-- [ ] `/health/live`, `/health/ready` (DB, Redis, alembic head)
+- [~] `/v1` sürümleme (backend ✅, frontend ❌) (eski yollar geriye dönük, gizli/deprecated); frontend `/v1` kullanır
+- [x] Spec yolları: `GET /v1/medications|doses|measurements?patient_id=` (yetkisiz → 404)
+- [x] Token bucket rate limit (Redis + Lua), `X-RateLimit-*`, `Retry-After`
+- [~] Idempotency-Key (backend ✅, frontend ❌) + `idempotency_keys` tablosu (migration `0008_idempotency`); frontend anahtar üretir
+- [x] ETag / 304, `Cache-Control: private, no-cache`
+- [x] Cursor sayfalama (ölçüm, doz, uyarı, koç mesajı)
+- [x] `/health/live`, `/health/ready` (DB, Redis, alembic head)
 - [ ] `tests/test_platform.py`
 
 ### C — Altyapı
-- [ ] Nginx reverse proxy + LB (`infra/nginx/`), api × 3, `X-Upstream` başlığı, güvenlik başlıkları, gzip, `limit_req`
+- [~] Nginx reverse proxy + LB (konfigürasyon ✅, compose bağlantısı ❌) (`infra/nginx/`), api × 3, `X-Upstream` başlığı, güvenlik başlıkları, gzip, `limit_req`
 - [ ] Graceful shutdown (uvicorn + compose `stop_grace_period`), healthcheck'ler
-- [ ] Prometheus + Grafana (pano) + Jaeger, compose profile `observability`; `setup_tracing(app)` (OTel, env ile açılır)
+- [~] Prometheus + Grafana (setup_tracing ✅, compose/pano ❌) (pano) + Jaeger, compose profile `observability`; `setup_tracing(app)` (OTel, env ile açılır)
 - [ ] k6 senaryoları (`infra/k6/`), `docs/yuk-testi.md` (1 vs 3 kopya, kopya durdurma)
 - [ ] `infra/README.md`
 
 ### D — Dayanıklılık, worker, yapay zekâ değerlendirmesi, CI
-- [ ] Circuit breaker (`services/circuit_breaker.py`, Redis'te durum) — LLM'e uygulanır
+- [x] Circuit breaker (`services/circuit_breaker.py`, Redis'te durum) — LLM'e uygulanır
 - [ ] DLQ (3 deneme + backoff), DLQ CLI ve metriği
 - [ ] PostgreSQL advisory lock ile lider worker
 - [ ] Worker graceful shutdown
@@ -52,12 +52,12 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] CI: adım adı ("40 senaryo" kaldır), guardrail testlerinin çift koşmaması, yeni adımlar
 
 ### E — Klinik içgörüler ve eğitim içeriği onayı
-- [ ] `services/clinical_insights.py`: uyum eğilimi, hedef aralıkta kalma oranı, doz atlama nedenleri, ölçüm sıklığı
-- [ ] `GET /patients/{id}/insights`; hasta listesinde eğilim
+- [x] `services/clinical_insights.py`: uyum eğilimi, hedef aralıkta kalma oranı, doz atlama nedenleri, ölçüm sıklığı
+- [x] `GET /patients/{id}/insights`; hasta listesinde eğilim
 - [ ] Hekim arayüzü: liste eğilim oku, detayda "Klinik özet" kartı
-- [ ] Eğitim içeriği onay ekranı `/hekim/egitim`, onay/ret uçları (+ gerekirse migration `0010_education_review`), RAG reddedileni kullanmaz
-- [ ] `POST /education/ingest-drug` bakım verene kapalı
-- [ ] `tests/test_clinical_insights.py`, `tests/test_education_review.py`
+- [~] Eğitim içeriği onay ekranı (backend ✅, sayfa ❌) `/hekim/egitim`, onay/ret uçları (+ gerekirse migration `0010_education_review`), RAG reddedileni kullanmaz
+- [x] `POST /education/ingest-drug` bakım verene kapalı
+- [~] `tests/test_clinical_insights.py` ✅, `tests/test_education_review.py` ❌
 
 ## Aktarma sonrası doğrulama ve kalan işler
 1. ✅ A → B → E → D → C iş paketlerindeki mevcut worktree değişiklikleri 2026-10-17'de `gelistirme` dalına aktarıldı. `schemas.py` ve `main.py` birleştirme çakışmaları çözüldü. Aşağıdaki tamamlanmamış iş kutuları bitmiş sayılmaz.
@@ -77,3 +77,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 ## Günlük
 - 2026-10-17: `gelistirme` dalı açıldı (474 test geçti). A, B, C, D, E ajanları paralel başlatıldı.
 - 2026-10-17: A-E worktree'lerindeki mevcut değişiklikler A → B → E → D → C sırasıyla `gelistirme` dalına aktarıldı. Migration zinciri düzeltildi; 512 backend testi, ruff, frontend lint/build başarılı. Compose stack çalışıyor; `/health/ready`, `/openapi.json` ve `/giris` 200 döndürüyor. İş paketlerindeki tamamlanmamış kutular ayrıca takip ediliyor.
+- 2026-10-17: Doğrulama: 512 test, ruff, frontend lint/build, tek alembic head ✅. Dosya bazlı denetimle tamamlananlar işaretlendi ([x] bitti, [~] kısmen). Eksikler için 5 ajan `git reset --hard gelistirme` ile senkronlanıp kaldıkları yerden devam ettirildi. Haftalık özet migration'ı gerekirse `0011_weekly_summaries` (down: 0010).
