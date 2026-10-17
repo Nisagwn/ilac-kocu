@@ -1,0 +1,4 @@
+# nginx imajının giriş betiği bu şablonu açılışta /etc/nginx/conf.d/00-ratelimit.conf olarak üretir
+# (yalnızca NGINX_ ile başlayan ortam değişkenleri yerine konur; bkz. Dockerfile NGINX_ENVSUBST_FILTER).
+# Varsayılan 20r/s; yük testinde tek IP'den gelen trafik için yükseltilebilir (docs/yuk-testi.md).
+limit_req_zone $binary_remote_addr zone=per_ip:10m rate=${NGINX_RATE_LIMIT};

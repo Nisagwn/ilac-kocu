@@ -5,7 +5,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.observability import RequestContextMiddleware, metrics_router
+from app.observability import RequestContextMiddleware, metrics_router, setup_tracing
 from app.platform import API_PREFIX, install_platform
 from app.routers import (
     alerts,
@@ -69,6 +69,7 @@ app.add_middleware(
 # Gözlemlenebilirlik: istek kimliği + JSON erişim logu + Prometheus (en dışta; /metrics OpenAPI'de görünmez)
 app.add_middleware(RequestContextMiddleware)
 app.include_router(metrics_router)
+setup_tracing(app)  # yalnızca OTEL_EXPORTER_OTLP_ENDPOINT tanımlıysa (Jaeger); aksi halde no-op
 
 # İş uçları /v1 altında. Sürümsüz eski yollar geriye dönük uyum için bir süre kalır: OpenAPI'de görünmez,
 # yanıtlarına "Deprecation: true" eklenir. Üst düzey kaynak yolları (resources) yalnızca /v1'de.

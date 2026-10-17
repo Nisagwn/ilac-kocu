@@ -16,3 +16,11 @@ pgvector>=0.3
 redis>=5.0
 anthropic>=1.11
 prometheus-client>=0.20
+# Dağıtık izleme (yalnızca OTEL_EXPORTER_OTLP_ENDPOINT tanımlıysa etkin; app/observability.py setup_tracing)
+opentelemetry-api==1.45.1
+opentelemetry-sdk==1.45.1
+opentelemetry-exporter-otlp-proto-http==1.45.1
+opentelemetry-instrumentation-fastapi==0.66b1
+opentelemetry-instrumentation-sqlalchemy==0.66b1
+opentelemetry-instrumentation-httpx==0.66b1
+opentelemetry-instrumentation-redis==0.66b1

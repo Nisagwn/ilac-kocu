@@ -17,6 +17,7 @@ import time
 
 from app.config import get_settings
 from app.db import SessionLocal
+from app.observability import setup_tracing
 from app.services import jobs
 from app.services.reminders import start_scheduler
 
@@ -92,6 +93,7 @@ def run(stop: threading.Event, redis=None, timeout: int = 5, session_factory=Ses
 def main() -> None:
     logging.basicConfig(level=logging.INFO, format="%(asctime)s %(levelname)s %(name)s: %(message)s")
     settings = get_settings()
+    setup_tracing(service_name="ilac-kocu-worker")  # yalnızca OTEL_EXPORTER_OTLP_ENDPOINT tanımlıysa
     stop = threading.Event()
 
     def _handle(signum, _frame):
