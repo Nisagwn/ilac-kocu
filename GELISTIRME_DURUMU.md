@@ -7,21 +7,21 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 
 ## Kurallar
 - Commit mesajları Türkçe; **asla** `Co-Authored-By`, "Generated with" ya da Claude/AI imzası yok. Git yazar ayarı değiştirilmez.
-- **Push yok.** Ne eski repoya ne yeni repoya (`ilac-uyum-kocu`) kullanıcı onayı olmadan push edilmez.
+- **Push:** yalnızca `gelistirme` dalına, her iş paketi bitince (kullanıcı onayı 2026-10-17). `main`'e ve yeni repoya (`ilac-uyum-kocu`) onaysız push yok.
 - Yeni repoya (`Nisagwn/ilac-uyum-kocu`) kod, teslim takvimine göre parça parça taşınır (M2 13 Kas, M3 11 Ara, M4 1 Oca, M5 17 Oca).
 - Doğrulama: `cd backend && .venv/Scripts/python.exe -m pytest -q && .venv/Scripts/python.exe -m ruff check app tests`; `cd frontend && npm run lint && npm run build`.
 - Guardrail değişirse `backend/tests/guardrail_scenarios.yaml` güncellenir.
 
-## İş paketleri (paralel ajanlar, her biri ayrı git worktree dalında)
+## İş paketleri (sırayla, doğrudan `gelistirme` dalında; her paket bitince commit + push)
 
 ### A — openFDA ilaç kataloğu ve seçimi
-- [ ] `drug_catalog` tablosu + migration `0007_drug_catalog`; `medications.catalog_id`, `medications.verified`
-- [ ] openFDA `count` ile katalog senkronu (diyabet/hipertansiyon EPC sınıfları) + CLI
-- [ ] Kürate TR ticari ad kataloğu `backend/app/data/drug_catalog_tr.yaml` (~60), `resolve_generic` buradan beslenir
-- [ ] `GET /drugs/search?q=` (TR ad / generic, Türkçe karakter duyarsız)
-- [ ] İlaç formunda otomatik tamamlamalı seçim; "listede yok" → `verified=false` + uyarı; hekim detayında rozet
-- [ ] Bakım veren rolünde `/drugs/label` eğitim içeriğine yazmaz
-- [ ] `tests/test_drug_catalog.py`
+- [x] `drug_catalog` tablosu + migration `0007_drug_catalog`; `medications.catalog_id`, `medications.verified`
+- [x] openFDA `count` ile katalog senkronu (diyabet/hipertansiyon EPC sınıfları) + CLI
+- [x] Kürate TR ticari ad kataloğu `backend/app/data/drug_catalog_tr.yaml` (46 etken madde / 53 ticari ad; yalnızca emin olunan adlar), `resolve_generic` buradan beslenir
+- [x] `GET /drugs/search?q=` (TR ad / generic, Türkçe karakter duyarsız)
+- [x] İlaç formunda otomatik tamamlamalı seçim; "listede yok" → `verified=false` + uyarı; hekim detayında rozet
+- [x] Bakım veren rolünde `/drugs/label` eğitim içeriğine yazmaz
+- [x] `tests/test_drug_catalog.py`
 
 ### B — API platform katmanı
 - [ ] `/v1` sürümleme (eski yollar geriye dönük, gizli/deprecated); frontend `/v1` kullanır
@@ -59,12 +59,12 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] `POST /education/ingest-drug` bakım verene kapalı
 - [ ] `tests/test_clinical_insights.py`, `tests/test_education_review.py`
 
-## Birleştirme planı (ajanlar bittikten sonra)
-1. Her ajan dalını `gelistirme`'ye sırayla birleştir: **A → B → E → D → C** (C en çok compose/main.py'ye dokunur, en son).
-2. **Migration zinciri**: ajanların hepsi `down_revision="0006_security"` yazdı. Birleştirirken zincirle:
+## Sıra ve entegrasyon notları
+1. Paket sırası: **A → B → E → D → C** (C en çok compose/main.py'ye dokunur, en son).
+2. **Migration zinciri** (her paket bir öncekinin üstüne yazar):
    `0006_security → 0007_drug_catalog → 0008_idempotency → 0009_weekly_summaries (varsa) → 0010_education_review (varsa)`.
-   Sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head` dene.
-3. Çakışma beklenen dosyalar: `backend/app/main.py`, `backend/app/models.py`, `backend/app/config.py`, `backend/app/observability.py`, `backend/app/worker.py`, `frontend/src/lib/api.ts`, `frontend/src/lib/types.ts`, `frontend/src/components/clinician/patient-detail.tsx`, `docker-compose.yml`, `backend/requirements.txt`.
+   Her migration'dan sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head`.
+3. ~~Çakışma beklenen dosyalar~~ (paralel ajan yok; geçersiz).
 4. openFDA çağrısını D'nin circuit breaker'ıyla sar (A'nın `openfda.py`'si üzerine).
 5. B'nin idempotency temizlik fonksiyonunu D'nin worker zamanlayıcısına bağla.
 6. Tüm testler + ruff + frontend lint/build; `docker compose up --build` ile uçtan uca deneme (giriş, ilaç arama/ekleme, doz, koç, hekim paneli).
@@ -79,3 +79,5 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 ## Günlük
 - 2026-10-17: `gelistirme` dalı açıldı (474 test geçti). A, B, C, D, E ajanları paralel başlatıldı.
 - 2026-10-17: A-E iş paketlerinin her birinde ayrı worktree'de kod değişiklikleri var; henüz birleştirilmediler ve bu nedenle tamamlanmış sayılmıyorlar. Birleştirme, migration zinciri ve doğrulama adımları yukarıdaki plana göre yapılacak.
+- 2026-10-17: Oturum kesildi; worktree dalları push edilmediği için A-E kodu kayboldu. Paketler sırayla, doğrudan `gelistirme` dalında yeniden yazılıyor; her paket sonunda push.
+- 2026-10-17: **A bitti.** 496 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0007_drug_catalog` upgrade/downgrade/upgrade ve seed denendi; tarayıcıda ilaç ekleme (öneri seçimi, listede olmayan ilaç uyarısı, hekim rozeti) doğrulandı.

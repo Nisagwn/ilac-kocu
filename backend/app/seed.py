@@ -6,7 +6,8 @@ Oluşturulan hesaplar (şifre: demo12345):
   yakin@demo.local     — bakım veren (salt okunur)
   + hekime atanmış 4 sentetik hasta (farklı uyum/risk profilleri; hekim panelini anlamlı kılmak için)
 
-Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir.
+Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir;
+kürate ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada etken maddeye göre upsert edilir.
 """
 
 import random
@@ -35,6 +36,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
+from app.services.drug_catalog import match_exact, upsert_curated
 from app.services.rag.search import ensure_embeddings
 
 PW = "demo12345"
@@ -94,6 +96,8 @@ def run() -> None:
     db = SessionLocal()
     created, updated = seed_education(db)
     print(f"Eğitim içeriği: {created} eklendi, {updated} güncellendi.")
+    created, updated = upsert_curated(db)
+    print(f"İlaç kataloğu: {created} eklendi, {updated} güncellendi.")
     if db.scalar(select(User).where(User.email == "hasta@demo.local")):
         print("Demo verisi zaten var.")
         return
@@ -141,6 +145,10 @@ def run() -> None:
 
     for profile in EXTRA_PATIENTS:
         _add_extra_patient(db, rnd, doc.id, today, **profile)
+
+    for med in db.scalars(select(Medication)):  # demo ilaçları katalogdaki karşılıklarına bağlanır
+        row = match_exact(db, med.name)
+        med.catalog_id, med.verified = (row.id, True) if row else (None, False)
 
     db.commit()
     print("Demo verisi oluşturuldu. Şifre:", PW)

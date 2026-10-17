@@ -10,7 +10,7 @@ import { api } from "@/lib/api";
 import type { Adherence, Alert, DoseLog, Measurement, Medication, Patient, WeeklySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AlertItem } from "./alert-item";
-import { AdherenceBadge, ReadOnlyBadge } from "./badges";
+import { AdherenceBadge, ReadOnlyBadge, UnverifiedDrugBadge } from "./badges";
 import { DoseCalendar } from "./dose-calendar";
 import {
   BAND_LABEL,
@@ -302,6 +302,10 @@ function AdherenceCard({
                       <span className="font-medium">{med?.name ?? `İlaç #${id}`}</span>
                       {med?.dose_text && <span className="ml-1 text-xs text-muted-foreground">{med.dose_text}</span>}
                       {!med && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
+                      {med && !med.verified && <UnverifiedDrugBadge />}
+                      {med?.active_ingredient && (
+                        <span className="block text-xs text-muted-foreground">{med.active_ingredient}</span>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground tabular-nums">
                       {med?.schedules.map((s) => s.time_of_day.slice(0, 5)).join(", ") || "—"}

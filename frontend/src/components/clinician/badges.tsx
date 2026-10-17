@@ -35,6 +35,20 @@ export function SeverityBadge({ severity }: { severity: Severity }) {
   );
 }
 
+/** İlaç kataloğunda olmayan (hastanın elle yazdığı) ilaç: hekim adı ve etken maddeyi kontrol etmeli. */
+export function UnverifiedDrugBadge() {
+  return (
+    <Badge
+      variant="outline"
+      className="ml-1 border-amber-200 bg-amber-50 text-amber-800"
+      title="İlaç katalogda bulunamadı; adı ve etken maddeyi kontrol edin"
+    >
+      <TriangleAlert aria-hidden />
+      Doğrulanmadı
+    </Badge>
+  );
+}
+
 export function ReadOnlyBadge() {
   return (
     <Badge variant="outline" className="border-sky-200 bg-sky-50 text-sky-800">

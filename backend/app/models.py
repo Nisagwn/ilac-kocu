@@ -127,11 +127,35 @@ class Medication(Base):
     notes: Mapped[str | None] = mapped_column(Text)
     active: Mapped[bool] = mapped_column(Boolean, default=True)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+    # İlaç kataloğundan seçildiyse (ya da ad katalogla birebir eşleştiyse) verified=True; değilse hekim kontrol eder
+    catalog_id: Mapped[int | None] = mapped_column(ForeignKey("drug_catalog.id", ondelete="SET NULL"), index=True)
+    verified: Mapped[bool] = mapped_column(Boolean, default=False)
 
     patient: Mapped[Patient] = relationship(back_populates="medications")
+    catalog: Mapped["DrugCatalog | None"] = relationship()
     schedules: Mapped[list["MedicationSchedule"]] = relationship(
         back_populates="medication", cascade="all, delete-orphan"
     )
+
+
+class DrugCatalog(Base):
+    """İlaç kataloğu: etken madde başına bir satır (openFDA generic_name, küçük harf, tuz eki atılmış).
+
+    Kaynak: kürate TR ticari ad listesi (app/data/drug_catalog_tr.yaml) ve openFDA `count` senkronu
+    (app/services/drug_catalog.py). `search_text`: Türkçe karakter duyarsız arama için normalize metin.
+    """
+
+    __tablename__ = "drug_catalog"
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    generic_name: Mapped[str] = mapped_column(String(160), unique=True)
+    brand_names: Mapped[list] = mapped_column(JSON, default=list)  # TR ticari adlar (görüntülenen haliyle)
+    indication_group: Mapped[str] = mapped_column(String(20), default="other")  # diabetes | hypertension | other
+    pharm_class: Mapped[str | None] = mapped_column(String(160))  # openFDA EPC sınıfı
+    source: Mapped[str] = mapped_column(String(20), default="curated")  # curated | openfda
+    label_count: Mapped[int | None] = mapped_column(Integer)  # openFDA'daki etiket sayısı (senkrondan)
+    search_text: Mapped[str] = mapped_column(Text, default="")
+    updated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, onupdate=utcnow)
 
 
 class MedicationSchedule(Base):

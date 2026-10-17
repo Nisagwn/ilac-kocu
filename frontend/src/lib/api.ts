@@ -10,6 +10,7 @@ import type {
   DoseLog,
   DoseStatus,
   DrugLabel,
+  DrugSearchHit,
   Measurement,
   MeasurementCreated,
   MeasurementIn,
@@ -96,5 +97,7 @@ export const api = {
   coachJob: (jobId: string) => request<CoachJob>(`/coach/jobs/${encodeURIComponent(jobId)}`),
   chatHistory: (limit = 50) => request<CoachMessage[]>(`/coach/history?limit=${limit}`),
 
+  searchDrugs: (q: string, init?: RequestInit) =>
+    request<DrugSearchHit[]>(`/drugs/search?q=${encodeURIComponent(q)}&limit=8`, init),
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),
 };

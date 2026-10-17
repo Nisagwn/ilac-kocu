@@ -56,6 +56,9 @@ export interface Medication {
   dose_text: string | null;
   notes: string | null;
   active: boolean;
+  catalog_id: number | null;
+  /** İlaç katalogda var mı; yoksa hekim kontrol etmeli */
+  verified: boolean;
   schedules: Schedule[];
 }
 
@@ -64,7 +67,19 @@ export interface MedicationIn {
   active_ingredient?: string | null;
   dose_text?: string | null;
   notes?: string | null;
+  catalog_id?: number | null;
   schedules: ScheduleIn[];
+}
+
+export interface DrugSearchHit {
+  id: number;
+  generic_name: string;
+  brand: string | null;
+  display_name: string;
+  brand_names: string[];
+  indication_group: "diabetes" | "hypertension" | "other";
+  pharm_class: string | null;
+  source: "curated" | "openfda";
 }
 
 export interface TodayDose {

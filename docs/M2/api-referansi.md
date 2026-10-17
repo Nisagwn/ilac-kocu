@@ -128,7 +128,8 @@ Rol sütunu: P = hasta, H = hekim, B = bakım veren, "Giriş" = giriş yapmış 
 
 | Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
 |---|---|---|---|---|---|
-| GET | `/drugs/label?name=` | Giriş | İlaç adından (TR ticari isim veya etken madde) openFDA etiket özeti; sonucu eğitim içeriğine de ekler | 404 etiket yok, 503 openFDA yanıt vermiyor, 422 ad uzunluğu | M2 |
+| GET | `/drugs/search?q=&limit=` | Giriş | İlaç kataloğunda arama (TR ticari ad / etken madde, Türkçe karakter duyarsız); ilaç formundaki otomatik tamamlama | 422 sorgu 2..80 karakter değil | M5 |
+| GET | `/drugs/label?name=` | Giriş | İlaç adından (TR ticari isim veya etken madde) openFDA etiket özeti; sonucu eğitim içeriğine de ekler (bakım veren istekleri hariç) | 404 etiket yok, 503 openFDA yanıt vermiyor, 422 ad uzunluğu | M2 |
 
 Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 

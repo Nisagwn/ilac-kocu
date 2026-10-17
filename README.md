@@ -150,7 +150,8 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 | `GET /patients/{id}/doses/today`, `PUT /patients/{id}/doses` | Bugün ekranı, "aldım/almadım" | hasta yazar |
 | `/patients/{id}/measurements` | Kan şekeri / tansiyon; eşik dışı değer → uyarı | hasta yazar |
 | `GET /alerts`, `POST /alerts/{id}/ack` | Hekimin açık uyarıları | hekim |
-| `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba) | tümü |
+| `GET /drugs/search?q=gli` | İlaç kataloğu araması (TR ticari ad / etken madde); ilaç formunda otomatik tamamlama | tümü |
+| `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba; bakım veren hariç) | tümü |
 | `GET /education` | Eğitim içeriği (RAG korpusu) listesi; `kind=curated\|openfda` süzgeci | giriş yapmış herkes |
 | `GET /education/search?q=` | Anlamsal arama (kosinüs + anahtar kelime), kaynaklı sonuçlar | giriş yapmış herkes |
 | `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır) | giriş yapmış herkes |

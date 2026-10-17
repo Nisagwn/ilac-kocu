@@ -1,0 +1,194 @@
+# Kürate TR ilaç kataloğu: Türkiye'de yaygın ticari adlar -> etken madde (openFDA generic_name, İngilizce).
+#
+# - openFDA ABD etiketlerini döndürür; TR ticari adları orada yoktur. Etiket sorgusu `generic` üzerinden atılır
+#   (app/services/openfda.py: resolve_generic bu dosyadan beslenir).
+# - `group`: diabetes | hypertension | other (hekim panelinde ve aramada gruplama için).
+# - `pharm_class`: openFDA EPC sınıfı (katalog senkronu aynı sınıfları kullanır).
+# - Demo amaçlıdır; üretimde TİTCK ilaç listesiyle doğrulanmalıdır. Doz bilgisi bilinçli olarak tutulmaz.
+
+- generic: metformin
+  group: diabetes
+  pharm_class: Biguanide [EPC]
+  brands: [Glifor, Glucophage, Matofin, Diaformin, Gluformin]
+- generic: glimepiride
+  group: diabetes
+  pharm_class: Sulfonylurea [EPC]
+  brands: [Amaryl]
+- generic: gliclazide
+  group: diabetes
+  pharm_class: Sulfonylurea [EPC]
+  brands: [Diamicron]
+- generic: sitagliptin
+  group: diabetes
+  pharm_class: Dipeptidyl Peptidase 4 Inhibitor [EPC]
+  brands: [Januvia]
+- generic: vildagliptin
+  group: diabetes
+  pharm_class: Dipeptidyl Peptidase 4 Inhibitor [EPC]
+  brands: [Galvus]
+- generic: saxagliptin
+  group: diabetes
+  pharm_class: Dipeptidyl Peptidase 4 Inhibitor [EPC]
+  brands: [Onglyza]
+- generic: linagliptin
+  group: diabetes
+  pharm_class: Dipeptidyl Peptidase 4 Inhibitor [EPC]
+  brands: [Trajenta]
+- generic: empagliflozin
+  group: diabetes
+  pharm_class: Sodium-Glucose Cotransporter 2 Inhibitor [EPC]
+  brands: [Jardiance]
+- generic: dapagliflozin
+  group: diabetes
+  pharm_class: Sodium-Glucose Cotransporter 2 Inhibitor [EPC]
+  brands: [Forziga]
+- generic: pioglitazone
+  group: diabetes
+  pharm_class: Thiazolidinedione [EPC]
+  brands: [Actos]
+- generic: repaglinide
+  group: diabetes
+  pharm_class: Glinide [EPC]
+  brands: [NovoNorm]
+- generic: acarbose
+  group: diabetes
+  pharm_class: alpha-Glucosidase Inhibitor [EPC]
+  brands: [Glucobay]
+- generic: insulin glargine
+  group: diabetes
+  pharm_class: Insulin Analog [EPC]
+  brands: [Lantus, Toujeo]
+- generic: insulin aspart
+  group: diabetes
+  pharm_class: Insulin Analog [EPC]
+  brands: [NovoRapid]
+- generic: insulin lispro
+  group: diabetes
+  pharm_class: Insulin Analog [EPC]
+  brands: [Humalog]
+- generic: insulin detemir
+  group: diabetes
+  pharm_class: Insulin Analog [EPC]
+  brands: [Levemir]
+- generic: liraglutide
+  group: diabetes
+  pharm_class: GLP-1 Receptor Agonist [EPC]
+  brands: [Victoza]
+- generic: dulaglutide
+  group: diabetes
+  pharm_class: GLP-1 Receptor Agonist [EPC]
+  brands: [Trulicity]
+- generic: semaglutide
+  group: diabetes
+  pharm_class: GLP-1 Receptor Agonist [EPC]
+  brands: [Ozempic]
+
+- generic: amlodipine
+  group: hypertension
+  pharm_class: Dihydropyridine Calcium Channel Blocker [EPC]
+  brands: [Norvasc]
+- generic: lercanidipine
+  group: hypertension
+  pharm_class: Dihydropyridine Calcium Channel Blocker [EPC]
+  brands: [Zanidip]
+- generic: nifedipine
+  group: hypertension
+  pharm_class: Dihydropyridine Calcium Channel Blocker [EPC]
+  brands: [Adalat]
+- generic: diltiazem
+  group: hypertension
+  pharm_class: Calcium Channel Blocker [EPC]
+  brands: [Diltizem]
+- generic: verapamil
+  group: hypertension
+  pharm_class: Calcium Channel Blocker [EPC]
+  brands: [Isoptin]
+- generic: perindopril
+  group: hypertension
+  pharm_class: Angiotensin Converting Enzyme Inhibitor [EPC]
+  brands: [Coversyl]
+- generic: ramipril
+  group: hypertension
+  pharm_class: Angiotensin Converting Enzyme Inhibitor [EPC]
+  brands: [Delix]
+- generic: enalapril
+  group: hypertension
+  pharm_class: Angiotensin Converting Enzyme Inhibitor [EPC]
+  brands: [Renitec]
+- generic: lisinopril
+  group: hypertension
+  pharm_class: Angiotensin Converting Enzyme Inhibitor [EPC]
+  brands: [Zestril]
+- generic: telmisartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Micardis]
+- generic: valsartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Diovan]
+- generic: candesartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Atacand]
+- generic: losartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Cozaar]
+- generic: irbesartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Karvea]
+- generic: olmesartan
+  group: hypertension
+  pharm_class: Angiotensin 2 Receptor Blocker [EPC]
+  brands: [Olmetec]
+- generic: metoprolol
+  group: hypertension
+  pharm_class: beta-Adrenergic Blocker [EPC]
+  brands: [Beloc]
+- generic: bisoprolol
+  group: hypertension
+  pharm_class: beta-Adrenergic Blocker [EPC]
+  brands: [Concor]
+- generic: nebivolol
+  group: hypertension
+  pharm_class: beta-Adrenergic Blocker [EPC]
+  brands: [Vasoxen]
+- generic: carvedilol
+  group: hypertension
+  pharm_class: beta-Adrenergic Blocker [EPC]
+  brands: [Dilatrend]
+- generic: indapamide
+  group: hypertension
+  pharm_class: Thiazide-like Diuretic [EPC]
+  brands: [Fludex]
+- generic: furosemide
+  group: hypertension
+  pharm_class: Loop Diuretic [EPC]
+  brands: [Lasix]
+- generic: spironolactone
+  group: hypertension
+  pharm_class: Aldosterone Antagonist [EPC]
+  brands: [Aldactone]
+- generic: doxazosin
+  group: hypertension
+  pharm_class: alpha-Adrenergic Blocker [EPC]
+  brands: [Cardura]
+
+- generic: atorvastatin
+  group: other
+  pharm_class: HMG-CoA Reductase Inhibitor [EPC]
+  brands: [Lipitor, Ator]
+- generic: rosuvastatin
+  group: other
+  pharm_class: HMG-CoA Reductase Inhibitor [EPC]
+  brands: [Crestor]
+- generic: aspirin
+  group: other
+  pharm_class: Platelet Aggregation Inhibitor [EPC]
+  brands: [Coraspin, Ecopirin]
+- generic: clopidogrel
+  group: other
+  pharm_class: P2Y12 Platelet Inhibitor [EPC]
+  brands: [Plavix]

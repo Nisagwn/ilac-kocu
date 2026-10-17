@@ -106,6 +106,7 @@ class MedicationIn(BaseModel):
     active_ingredient: str | None = None
     dose_text: str | None = Field(default=None, max_length=120, description="Hekimin yazdığı doz, ör. '1000 mg'")
     notes: str | None = None
+    catalog_id: int | None = Field(default=None, description="GET /drugs/search sonucundan seçilen katalog kaydı")
     schedules: list[ScheduleIn] = Field(default_factory=list)
 
 
@@ -115,6 +116,7 @@ class MedicationUpdate(BaseModel):
     dose_text: str | None = None
     notes: str | None = None
     active: bool | None = None
+    catalog_id: int | None = None
     schedules: list[ScheduleIn] | None = None
 
 
@@ -126,7 +128,20 @@ class MedicationOut(ORM):
     dose_text: str | None
     notes: str | None
     active: bool
+    catalog_id: int | None
+    verified: bool = Field(description="İlaç katalogda var mı (yoksa hekim kontrol etmeli)")
     schedules: list[ScheduleOut]
+
+
+class DrugSearchHit(BaseModel):
+    id: int
+    generic_name: str
+    brand: str | None = Field(description="Sorguyla eşleşen TR ticari adı; etken madde eşleşmesinde boş")
+    display_name: str
+    brand_names: list[str]
+    indication_group: str
+    pharm_class: str | None
+    source: str
 
 
 # ---------- Doses ----------
