@@ -70,7 +70,24 @@ function errorMessage(err: unknown) {
   return "Bir hata oluştu, lütfen tekrar deneyin.";
 }
 
-export function PushToggle({ className }: { className?: string }) {
+const TEXT = {
+  patient: {
+    title: "İlaç hatırlatmaları",
+    description: "İlaç saatiniz geldiğinde bu cihaza bildirim gönderilir. Bildirimde sağlık verisi yer almaz.",
+    on: "İlaç hatırlatmalarını aç",
+    off: "İlaç hatırlatmalarını kapat",
+  },
+  clinician: {
+    title: "Hekim bildirimleri",
+    description:
+      "Haftalık hasta özetleri hazır olduğunda (Pazartesi sabahı) bu cihaza bildirim gönderilir. Bildirimde hasta adı veya sağlık verisi yer almaz.",
+    on: "Bildirimleri aç",
+    off: "Bildirimleri kapat",
+  },
+} as const;
+
+export function PushToggle({ className, audience = "patient" }: { className?: string; audience?: keyof typeof TEXT }) {
+  const text = TEXT[audience];
   const [status, setStatus] = useState<Status>("loading");
   const [busy, setBusy] = useState(false);
   const [message, setMessage] = useState<string | null>(null);
@@ -203,11 +220,9 @@ export function PushToggle({ className }: { className?: string }) {
       <CardHeader>
         <CardTitle className="flex items-center gap-2">
           {on ? <BellRing className="size-4 text-primary" /> : <Bell className="size-4" />}
-          İlaç hatırlatmaları
+          {text.title}
         </CardTitle>
-        <CardDescription>
-          İlaç saatiniz geldiğinde bu cihaza bildirim gönderilir. Bildirimde sağlık verisi yer almaz.
-        </CardDescription>
+        <CardDescription>{text.description}</CardDescription>
       </CardHeader>
       <CardContent className="flex flex-col gap-3">
         {status === "loading" && <p className="text-muted-foreground">Kontrol ediliyor…</p>}
@@ -248,7 +263,7 @@ export function PushToggle({ className }: { className?: string }) {
               onClick={on ? disable : enable}
             >
               {on ? <BellOff /> : <Bell />}
-              {on ? "İlaç hatırlatmalarını kapat" : "İlaç hatırlatmalarını aç"}
+              {on ? text.off : text.on}
             </Button>
             {on && (
               <Button variant="ghost" size="lg" disabled={busy} onClick={sendTest}>

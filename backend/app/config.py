@@ -37,6 +37,15 @@ class Settings(BaseSettings):
     idempotency_max_body_bytes: int = 256_000  # bundan büyük yanıtlar saklanmaz (tekrar isteği yeniden işlenir)
     health_check_migrations: bool = True  # /health/ready veritabanının alembic head'de olmasını da ister
 
+    # --- Devre kesiciler (app/services/circuit_breaker.py) ---
+    # window_seconds içinde failure_threshold hata -> open_seconds boyunca istek atılmaz (hemen yedek yanıt)
+    llm_breaker_failure_threshold: int = 5
+    llm_breaker_window_seconds: int = 60
+    llm_breaker_open_seconds: int = 30
+    openfda_breaker_failure_threshold: int = 5
+    openfda_breaker_window_seconds: int = 60
+    openfda_breaker_open_seconds: int = 60
+
     openfda_base_url: str = "https://api.fda.gov/drug/label.json"
     openfda_api_key: str | None = None
     redis_url: str | None = None  # varsa openFDA etiket önbelleği Redis'te, yoksa süreç içi
@@ -69,7 +78,15 @@ class Settings(BaseSettings):
 
     # --- Asenkron koç işleri (POST /coach/jobs, app/worker.py) ---
     coach_job_stale_minutes: int = 10  # bu süreden uzun "running" kalan işler işçi açılışında kurtarılır
-    coach_job_max_attempts: int = 2  # bu kadar denemeden sonra iş kural tabanlı yanıtla kapatılır
+    coach_job_max_attempts: int = 3  # bu kadar denemeden sonra iş DLQ'ya (ölü mektup kuyruğu) düşer
+    coach_job_retry_base_seconds: float = 2.0  # yeniden deneme beklemesi: taban * 2^(deneme-1)
+    coach_job_retry_max_seconds: float = 60.0
+    dlq_retention_days: int = 7  # DLQ'daki işlerin mesajı en fazla bu kadar tutulur (dlq purge)
+
+    # --- Zamanlanmış işler (yalnızca lider işçi; app/worker.py) ---
+    weekly_summary_enabled: bool = True  # Pazartesi 07:00 (TIMEZONE) haftalık özet + hekime bildirim
+    weekly_summary_cron: str = "0 7 * * mon"  # dakika saat gün ay haftanın-günü
+    leader_retry_seconds: int = 15  # lider olmayan işçi bu aralıkla liderliği dener
 
     # --- M4: LLM koç ---
     # Sağlayıcı: "auto" (OPENROUTER_API_KEY varsa OpenRouter, yoksa ANTHROPIC_API_KEY varsa Anthropic),

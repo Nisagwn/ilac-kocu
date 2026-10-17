@@ -41,15 +41,15 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] `infra/README.md`
 
 ### D — Dayanıklılık, worker, yapay zekâ değerlendirmesi, CI
-- [ ] Circuit breaker (`services/circuit_breaker.py`, Redis'te durum) — LLM'e uygulanır
-- [ ] DLQ (3 deneme + backoff), DLQ CLI ve metriği
-- [ ] PostgreSQL advisory lock ile lider worker
-- [ ] Worker graceful shutdown
-- [ ] Pazartesi 07:00 zamanlanmış haftalık özet (+ gerekirse migration `0010_weekly_summaries`), hekime bildirim
-- [ ] Koç kalite değerlendirme seti `tests/coach_eval_scenarios.yaml` + `tests/test_coach_eval.py`
-- [ ] LLM karşılaştırma betiği `backend/scripts/eval_llm_models.py` → `docs/M4/llm-karsilastirma.md` (gerçek API'ye karşı kullanıcı onayıyla koşulacak)
-- [ ] pgvector üzerinde RAG testi (`pytest.mark.postgres`) — reddedilen içeriğin `_pg_candidates`'ta elendiği de test edilsin
-- [ ] CI: adım adı ("40 senaryo" kaldır), guardrail testlerinin çift koşmaması, yeni adımlar
+- [x] Circuit breaker (`services/circuit_breaker.py`, Redis'te durum) — LLM'e uygulanır
+- [x] DLQ (3 deneme + backoff), DLQ CLI ve metriği
+- [x] PostgreSQL advisory lock ile lider worker
+- [x] Worker graceful shutdown
+- [x] Pazartesi 07:00 zamanlanmış haftalık özet (+ gerekirse migration `0010_weekly_summaries`), hekime bildirim
+- [x] Koç kalite değerlendirme seti `tests/coach_eval_scenarios.yaml` + `tests/test_coach_eval.py`
+- [x] LLM karşılaştırma betiği `backend/scripts/eval_llm_models.py` → `docs/M4/llm-karsilastirma.md` (şimdilik yalnızca kural tabanlı taban çizgisi; gerçek API'ye karşı kullanıcı onayıyla koşulacak)
+- [x] pgvector üzerinde RAG testi (`pytest.mark.postgres`) — reddedilen içeriğin `_pg_candidates`'ta elendiği de test edilsin
+- [x] CI: adım adı ("40 senaryo" kaldır), guardrail testlerinin çift koşmaması, yeni adımlar
 
 ### E — Klinik içgörüler ve eğitim içeriği onayı
 - [x] `services/clinical_insights.py`: uyum eğilimi, hedef aralıkta kalma oranı, doz atlama nedenleri, ölçüm sıklığı
@@ -66,9 +66,9 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
    (E, D'den önce yapıldığı için numaralar plana göre yer değiştirdi.)
    Her migration'dan sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head`.
 3. ~~Çakışma beklenen dosyalar~~ (paralel ajan yok; geçersiz).
-4. openFDA çağrısını D'nin circuit breaker'ıyla sar (A'nın `openfda.py`'si üzerine).
-5. B'nin idempotency temizlik fonksiyonunu (`services/idempotency.purge_expired`) D'nin worker zamanlayıcısına bağla.
-5b. D (CI): Redis servisi ekle ve `REDIS_TEST_URL` ver; `test_redis_lua_token_bucket` şu an CI'da atlanıyor.
+4. ~~openFDA çağrısını D'nin circuit breaker'ıyla sar~~ (D'de yapıldı).
+5. ~~Idempotency temizliğini lider işçi zamanlayıcısına bağla~~ (D'de yapıldı: `idempotency_purge` saatlik).
+5b. ~~CI'a Redis servisi + `REDIS_TEST_URL`~~ (D'de yapıldı; ayrıca `TEST_DATABASE_URL`).
 6. Tüm testler + ruff + frontend lint/build; `docker compose up --build` ile uçtan uca deneme (giriş, ilaç arama/ekleme, doz, koç, hekim paneli).
 7. Belgeler: `docs/er-diyagrami.md` güncelle (yeni tablolar: drug_catalog, idempotency_keys, weekly_summaries?, coach_jobs, refresh_tokens, access_logs), README'ye ER diyagramını göm, README "Durum" tablosu.
 
@@ -85,3 +85,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - 2026-10-17: **A bitti.** 496 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0007_drug_catalog` upgrade/downgrade/upgrade ve seed denendi; tarayıcıda ilaç ekleme (öneri seçimi, listede olmayan ilaç uyarısı, hekim rozeti) doğrulandı.
 - 2026-10-17: **B bitti.** 529 backend testi geçti (gerçek Redis'le Lua testi dahil), ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0008_idempotency` upgrade/downgrade/upgrade denendi. Tarayıcıda: tüm trafik `/v1`'den, ikinci ziyarette 304, doz işaretlemede Idempotency-Key gidiyor, `/health/ready` Redis+DB+migration "ok". Koça mesaj genel istek sınırından muaf (acil yanıt asla engellenmez). Belge: `docs/M2/api-platform.md`.
 - 2026-10-17: **E bitti.** 560 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0009_education_review` upgrade/downgrade/upgrade ve temiz seed denendi (seed artık atlanan dozlara örnek neden yazar; ayrı rastgele üreteç, diğer demo sayıları değişmedi). Tarayıcıda: hasta listesinde eğilim okları, detayda Klinik özet kartı, `/hekim/egitim`'de onay/ret/geri al. Belge: `docs/M5/klinik-icgoruler.md`.
+- 2026-10-17: **D bitti.** 608 backend testi geçti (gerçek Redis + PostgreSQL ile, atlanan yok), ruff (app, tests, scripts) temiz. PostgreSQL'de `0010_weekly_summaries` upgrade/downgrade/upgrade. İki gerçek işçiyle lider devri denendi (A'ya SIGTERM → B 2 sn'de lider). Davranış değişiklikleri: `COACH_JOB_MAX_ATTEMPTS` 2 → 3 (spec), hekim artık push aboneliği açabilir (haftalık özet bildirimi; bakım veren hâlâ 403), zamanlayıcı `app/scheduler.py`'ye taşındı. Belge: `docs/M5/dayaniklilik.md`.

@@ -24,14 +24,17 @@ TestingSession = sessionmaker(bind=engine, autoflush=False, expire_on_commit=Fal
 
 @pytest.fixture(autouse=True)
 def _isolate_shared_state():
-    """İstek sınırı sayaçları ve Redis istemcisi testler arasında taşınmaz."""
+    """İstek sınırı sayaçları, devre kesici durumları ve Redis istemcisi testler arasında taşınmaz."""
     from app.redis_client import reset_redis
+    from app.services.circuit_breaker import reset_local_breakers
     from app.services.ratelimit import reset_local_limits
 
     reset_local_limits()
+    reset_local_breakers()
     reset_redis(None)
     yield
     reset_local_limits()
+    reset_local_breakers()
 
 
 @pytest.fixture()

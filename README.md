@@ -220,25 +220,35 @@ Etik değerlendirme ve zarar senaryoları: [final rapor §11](docs/M5/final-rapo
 ## Testler ve CI
 
 ```bash
-cd backend && pytest -q && ruff check app tests                 # SQLite bellek içi, gerçek LLM çağrısı yok
+cd backend && pytest -q && ruff check app tests scripts         # SQLite bellek içi, gerçek LLM çağrısı yok
+# gerçek altyapı testleri (yoksa atlanır): Lua token bucket, ortak devre kesici, pgvector, advisory lock
+REDIS_TEST_URL=redis://localhost:6379/15 TEST_DATABASE_URL=postgresql+psycopg://ilac:ilac@localhost:5433/ilac_kocu pytest -q
 cd frontend && npm run lint && npx tsc --noEmit && npm run build
 ```
 
 ```
 backend/tests/
 ├── guardrail_scenarios.yaml  232 red-team senaryosu (beklenen eylemle)
+├── coach_eval_scenarios.yaml koç kalite seti: veriye dayalılık, doğru kaynak, eskalasyon, kapsam
 ├── test_guardrails.py        senaryo seti (parametrik) + çıktı doğrulayıcı
+├── test_coach_eval.py        kalite seti (kural tabanlı koç tüm ölçütleri geçmeli) + model karşılaştırma betiği
 ├── test_adherence.py         uyum skoru (spec örneği: 7 günde 3 kaçırılmış doz)
 ├── test_api.py               auth, CRUD, rol bazlı erişim (404), koç, openFDA (mock)
 ├── test_coach_llm.py         Claude tool döngüsü, grounding, bütçe, yedek (sahte istemci)
 ├── test_rag.py               embedding, arama, seed, openFDA ingest, /education uçları
+├── test_rag_postgres.py      pgvector yolu (PostgreSQL gerekir)
 ├── test_summary_llm.py       haftalık anlatı: LLM, önbellek, şablon yedeği
-└── test_push.py              VAPID abonelik, hatırlatma zamanlayıcısı
+├── test_push.py              VAPID abonelik, hatırlatma zamanlayıcısı
+├── test_drug_catalog.py      ilaç kataloğu, openFDA senkronu, arama, doğrulama
+├── test_platform.py          /v1, token bucket, Idempotency-Key, ETag, cursor sayfalama, sağlık uçları
+├── test_clinical_insights.py klinik özet: eğilim, hedef aralıkta kalma, atlama nedenleri
+├── test_education_review.py  eğitim içeriği hekim onayı, RAG'in reddedileni kullanmaması
+└── test_resilience.py        devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış haftalık özet
 ```
 
-**Toplam 469 backend testi** geçer (parametrik senaryolar dahil); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live` (API anahtarı gerekir).
+**Toplam 608 backend testi** geçer (parametrik senaryolar dahil; gerçek Redis/PostgreSQL ile hiçbiri atlanmaz); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live`; modelleri kalite setiyle karşılaştırmak için `python -m scripts.eval_llm_models --live --models ...` (API anahtarı gerekir, ücretli; sonuç [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md)).
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → koç kalite seti → diğer testler, Redis ve PostgreSQL servisleriyle → tek migration head kontrolü → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
 
 ## Belgeler
 
@@ -254,16 +264,20 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → gua
 | [`docs/er-diyagrami.md`](docs/er-diyagrami.md) | ER diyagramı |
 | **M2** | |
 | [`docs/M2/README.md`](docs/M2/README.md) | M2 teslim belgeleri |
+| [`docs/M2/api-platform.md`](docs/M2/api-platform.md) | `/v1` sürümleme, token bucket, Idempotency-Key, ETag, cursor sayfalama, sağlık uçları |
 | **M3** | |
 | [`docs/M3/README.md`](docs/M3/README.md) | M3 teslim belgeleri |
 | **M4** | |
 | [`docs/M4/guardrail-raporu.md`](docs/M4/guardrail-raporu.md) | 232 senaryoluk guardrail test raporu (kategori dağılımı, recall, yanlış pozitif) |
 | [`docs/M4/uyum-skoru-dogrulama.md`](docs/M4/uyum-skoru-dogrulama.md) | Uyum skoru elle doğrulaması (3 hata bulundu ve düzeltildi) |
+| [`docs/M4/llm-karsilastirma.md`](docs/M4/llm-karsilastirma.md) | Koç kalite setiyle LLM model karşılaştırması (betikle üretilir) |
 | **M5** | |
 | [`docs/M5/final-rapor.md`](docs/M5/final-rapor.md) | Final rapor: mimari, yapay zekâ, guardrail sonuçları, gizlilik, **etik/güvenlik değerlendirmesi**, **sınırlılıklar** |
 | [`docs/M5/kurulum.md`](docs/M5/kurulum.md) | Kurulum talimatı (Windows / macOS / Linux) |
 | [`docs/M5/demo-senaryosu.md`](docs/M5/demo-senaryosu.md) | Demo videosu senaryosu ve kayıt kontrol listesi |
 | [`docs/M5/etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md) | Değerlendirme ölçütü → kanıt eşlemesi |
+| [`docs/M5/klinik-icgoruler.md`](docs/M5/klinik-icgoruler.md) | Hekim klinik özeti ve eğitim içeriği onayı |
+| [`docs/M5/dayaniklilik.md`](docs/M5/dayaniklilik.md) | Devre kesici, yeniden deneme + DLQ, lider işçi, zamanlanmış işler, yapay zekâ değerlendirmesi |
 | Demo videosu | <!-- KULLANICI: kayıttan sonra video bağlantısını buraya yazın --> *(henüz yüklenmedi)* |
 
 ## Sınırlılıklar

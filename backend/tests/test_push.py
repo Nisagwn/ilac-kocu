@@ -70,10 +70,13 @@ def test_subscribe_upsert_and_unsubscribe(client, db, patient):
 
 
 def test_push_role_restriction(client, clinician):
+    # Hekim haftalık özet bildirimi için abone olabilir; bakım veren (salt okunur) olamaz
     _, dh = clinician
-    assert client.post("/push/subscribe", headers=dh, json=SUB).status_code == 403
-    assert client.get("/push/vapid-public-key", headers=dh).status_code == 403
-    assert client.post("/push/test", headers=dh).status_code == 403
+    assert client.post("/push/subscribe", headers=dh, json=SUB).status_code == 204
+    _, ch = register(client, "yakin@example.com", role="caregiver")
+    assert client.post("/push/subscribe", headers=ch, json=SUB).status_code == 403
+    assert client.get("/push/vapid-public-key", headers=ch).status_code == 403
+    assert client.post("/push/test", headers=ch).status_code == 403
     assert client.post("/push/subscribe", json=SUB).status_code == 401
 
 

@@ -325,6 +325,28 @@ class CoachJob(Base):
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
     started_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
     finished_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True))
+    # DLQ (migration 0010): tüm denemeler tükenince iş "ölü mektup" olur; mesaj DLQ_RETENTION_DAYS boyunca
+    # yeniden deneme için tutulur. last_error yalnızca hata türüdür (içerik yok).
+    dead_lettered_at: Mapped[datetime | None] = mapped_column(DateTime(timezone=True), index=True)
+    last_error: Mapped[str | None] = mapped_column(String(80))
+
+
+class WeeklySummary(Base):
+    """Zamanlanmış haftalık özet (Pazartesi 07:00, lider işçi; app/services/weekly_reports.py).
+
+    `payload`: services/summary.weekly_summary çıktısı (sayısal özet + anlatı). Hasta başına dönem başına bir satır.
+    """
+
+    __tablename__ = "weekly_summaries"
+    __table_args__ = (UniqueConstraint("patient_id", "period_start", name="uq_weekly_summary_period"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), index=True)
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)
+    payload: Mapped[dict] = mapped_column(JSON)
+    narrative_source: Mapped[str | None] = mapped_column(String(20))
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
 
 
 class RefreshToken(Base):

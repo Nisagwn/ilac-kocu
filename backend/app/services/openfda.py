@@ -12,6 +12,7 @@ import httpx
 
 from app.config import get_settings
 from app.redis_client import get_redis
+from app.services.circuit_breaker import CircuitOpenError, get_breaker
 from app.services.drug_catalog import brand_to_generic, canonical_generic
 
 MAX_FIELD_CHARS = 1200
@@ -78,8 +79,17 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
 
     own_client = client is None
     client = client or httpx.Client(timeout=10)
-    try:
+
+    def _get() -> httpx.Response:
         resp = client.get(settings.openfda_base_url, params=params)
+        if resp.status_code >= 500 or resp.status_code == 429:  # devre kesiciye hata olarak sayılır
+            raise OpenFDAUnavailable(f"openFDA HTTP {resp.status_code}")
+        return resp
+
+    try:
+        resp = get_breaker("openfda").call(_get)
+    except CircuitOpenError as e:  # openFDA art arda hata verdi: bir süre istek atılmaz
+        raise OpenFDAUnavailable(str(e)) from e
     except httpx.HTTPError as e:
         raise OpenFDAUnavailable(str(e)) from e
     finally:

@@ -2,7 +2,7 @@ name: CI
 
 on:
   push:
-    branches: [main]
+    branches: [main, gelistirme]
   pull_request:
 
 jobs:
@@ -21,8 +21,17 @@ jobs:
         ports: ["5432:5432"]
         options: >-
           --health-cmd "pg_isready -U ilac" --health-interval 5s --health-retries 10
+      redis:
+        image: redis:7-alpine
+        ports: ["6379:6379"]
+        options: >-
+          --health-cmd "redis-cli ping" --health-interval 5s --health-retries 10
     env:
       JWT_SECRET: ci-secret-ci-secret-ci-secret-ci-secret
+      # Gerçek altyapı isteyen testler (yoksa atlanır): Lua token bucket, ortak devre kesici,
+      # pgvector RAG yolu, PostgreSQL advisory lock ile lider seçimi
+      REDIS_TEST_URL: redis://localhost:6379/15
+      TEST_DATABASE_URL: postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu
     steps:
       - uses: actions/checkout@v4
       - uses: actions/setup-python@v5
@@ -33,18 +42,22 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check app tests
+        run: ruff check app tests scripts
 
-      - name: Guardrail red-team seti (40 senaryo)
+      - name: Guardrail red-team seti
         run: pytest tests/test_guardrails.py -v
 
-      - name: Birim ve API testleri
-        run: pytest -q
+      - name: Koç kalite değerlendirme seti
+        run: pytest tests/test_coach_eval.py -v
+
+      - name: Birim, API, platform ve PostgreSQL/Redis testleri
+        run: pytest -q -rs --ignore=tests/test_guardrails.py --ignore=tests/test_coach_eval.py
 
       - name: Migration (PostgreSQL) — upgrade / downgrade / upgrade
         env:
           DATABASE_URL: postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu
         run: |
+          test "$(alembic heads | wc -l)" -eq 1  # migration zinciri dallanmamış
           alembic upgrade head
           alembic downgrade base
           alembic upgrade head

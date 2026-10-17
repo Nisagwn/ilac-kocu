@@ -3,6 +3,7 @@
 import Link from "next/link";
 import { useRouter } from "next/navigation";
 import { Activity, ChevronRight, Flag, TrendingDown, Users, type LucideIcon } from "lucide-react";
+import { PushToggle } from "@/components/push-toggle";
 import { Card, CardContent } from "@/components/ui/card";
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { api } from "@/lib/api";
@@ -193,6 +194,7 @@ export function ClinicianPatientList() {
               </Table>
             )}
           </Card>
+          <PushToggle audience="clinician" />
         </>
       )}
     </div>

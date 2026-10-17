@@ -80,38 +80,11 @@ def send_due_reminders(db: Session, now: datetime | None = None, sender: PushSen
     return reminded
 
 
-# ---------------- Zamanlayıcı (APScheduler) ----------------
+# ---------------- Zamanlayıcı ----------------
+# İş tanımı ve başlatma app/scheduler.py'dedir (lider işçide). Bu yardımcı geriye dönük uyumluluk içindir.
 def scheduler_should_start(settings: Settings) -> bool:
     import sys
 
     if "pytest" in sys.modules:  # testlerde asla arka plan işi başlatma
         return False
     return settings.reminders_enabled and settings.vapid_configured
-
-
-def _run_job() -> None:
-    from app.db import SessionLocal
-
-    db = SessionLocal()
-    try:
-        n = send_due_reminders(db)
-        if n:
-            log.info("%s doz hatırlatması gönderildi", n)
-    except Exception:
-        log.exception("Doz hatırlatma işi başarısız")
-        db.rollback()
-    finally:
-        db.close()
-
-
-def start_scheduler(settings: Settings):
-    """Koşullar uygunsa her dakika çalışan BackgroundScheduler başlatır; aksi halde None döner."""
-    if not scheduler_should_start(settings):
-        return None
-    from apscheduler.schedulers.background import BackgroundScheduler
-
-    scheduler = BackgroundScheduler(timezone=settings.timezone)
-    scheduler.add_job(_run_job, "interval", minutes=1, id="dose_reminders", max_instances=1, coalesce=True)
-    scheduler.start()
-    log.info("Doz hatırlatma zamanlayıcısı başlatıldı")
-    return scheduler
