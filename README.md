@@ -138,6 +138,8 @@ Bileşen ve koç isteği sıra diyagramı: [`docs/M1/05-mimari.md`](docs/M1/05-m
 
 ## API özeti
 
+Tüm uçlar `/v1` önekiyle yayınlanır (tabloda önek yazılmadı); sürümsüz eski yollar geriye dönük çalışır ve `Deprecation` başlığı taşır. Platform: token bucket istek sınırı (`X-RateLimit-*`, 429 + `Retry-After`), yazma isteklerinde `Idempotency-Key`, GET'te `ETag`/304, listelerde `limit` + `cursor` sayfalama, `/health/live` ve `/health/ready`. Ayrıntı: [docs/M2/api-platform.md](docs/M2/api-platform.md).
+
 | Uç nokta | Açıklama | Rol |
 |---|---|---|
 | `POST /auth/register`, `/auth/login`, `GET /auth/me` | Kayıt (hasta için açık rıza zorunlu), JWT (15 dk) + yenileme token'ı; giriş 5/dk/IP | herkes |

@@ -27,6 +27,16 @@ class Settings(BaseSettings):
     # (ör. ["172.16.0.0/12"]) ve API portu dışarıya açılmamalıdır.
     trusted_proxies: list[str] = ["127.0.0.1", "::1"]
 
+    # --- API platform (app/middleware.py) ---
+    # Token bucket: kimlik (giriş yapmışsa kullanıcı, değilse IP) başına `capacity` jetonluk kova,
+    # saniyede `refill` jeton dolar. Redis varsa tüm API kopyaları ortak kovayı kullanır.
+    api_rate_limit_enabled: bool = True
+    api_rate_limit_capacity: int = 120
+    api_rate_limit_refill_per_second: float = 2.0
+    idempotency_ttl_hours: int = 24  # Idempotency-Key kayıtlarının saklanma süresi
+    idempotency_max_body_bytes: int = 256_000  # bundan büyük yanıtlar saklanmaz (tekrar isteği yeniden işlenir)
+    health_check_migrations: bool = True  # /health/ready veritabanının alembic head'de olmasını da ister
+
     openfda_base_url: str = "https://api.fda.gov/drug/label.json"
     openfda_api_key: str | None = None
     redis_url: str | None = None  # varsa openFDA etiket önbelleği Redis'te, yoksa süreç içi

@@ -24,14 +24,14 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [x] `tests/test_drug_catalog.py`
 
 ### B — API platform katmanı
-- [ ] `/v1` sürümleme (eski yollar geriye dönük, gizli/deprecated); frontend `/v1` kullanır
-- [ ] Spec yolları: `GET /v1/medications|doses|measurements?patient_id=` (yetkisiz → 404)
-- [ ] Token bucket rate limit (Redis + Lua), `X-RateLimit-*`, `Retry-After`
-- [ ] Idempotency-Key + `idempotency_keys` tablosu (migration `0008_idempotency`); frontend anahtar üretir
-- [ ] ETag / 304, `Cache-Control: private, no-cache`
-- [ ] Cursor sayfalama (ölçüm, doz, uyarı, koç mesajı)
-- [ ] `/health/live`, `/health/ready` (DB, Redis, alembic head)
-- [ ] `tests/test_platform.py`
+- [x] `/v1` sürümleme (eski yollar geriye dönük, gizli/deprecated); frontend `/v1` kullanır
+- [x] Spec yolları: `GET /v1/medications|doses|measurements?patient_id=` (yetkisiz → 404)
+- [x] Token bucket rate limit (Redis + Lua), `X-RateLimit-*`, `Retry-After`
+- [x] Idempotency-Key + `idempotency_keys` tablosu (migration `0008_idempotency`); frontend anahtar üretir
+- [x] ETag / 304, `Cache-Control: private, no-cache`
+- [x] Cursor sayfalama (ölçüm, doz, uyarı, koç mesajı)
+- [x] `/health/live`, `/health/ready` (DB, Redis, alembic head)
+- [x] `tests/test_platform.py`
 
 ### C — Altyapı
 - [ ] Nginx reverse proxy + LB (`infra/nginx/`), api × 3, `X-Upstream` başlığı, güvenlik başlıkları, gzip, `limit_req`
@@ -66,7 +66,8 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
    Her migration'dan sonra `alembic heads` tek head göstermeli; PostgreSQL'de `upgrade head`, `downgrade -1`, `upgrade head`.
 3. ~~Çakışma beklenen dosyalar~~ (paralel ajan yok; geçersiz).
 4. openFDA çağrısını D'nin circuit breaker'ıyla sar (A'nın `openfda.py`'si üzerine).
-5. B'nin idempotency temizlik fonksiyonunu D'nin worker zamanlayıcısına bağla.
+5. B'nin idempotency temizlik fonksiyonunu (`services/idempotency.purge_expired`) D'nin worker zamanlayıcısına bağla.
+5b. D (CI): Redis servisi ekle ve `REDIS_TEST_URL` ver; `test_redis_lua_token_bucket` şu an CI'da atlanıyor.
 6. Tüm testler + ruff + frontend lint/build; `docker compose up --build` ile uçtan uca deneme (giriş, ilaç arama/ekleme, doz, koç, hekim paneli).
 7. Belgeler: `docs/er-diyagrami.md` güncelle (yeni tablolar: drug_catalog, idempotency_keys, weekly_summaries?, coach_jobs, refresh_tokens, access_logs), README'ye ER diyagramını göm, README "Durum" tablosu.
 
@@ -81,3 +82,4 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - 2026-10-17: A-E iş paketlerinin her birinde ayrı worktree'de kod değişiklikleri var; henüz birleştirilmediler ve bu nedenle tamamlanmış sayılmıyorlar. Birleştirme, migration zinciri ve doğrulama adımları yukarıdaki plana göre yapılacak.
 - 2026-10-17: Oturum kesildi; worktree dalları push edilmediği için A-E kodu kayboldu. Paketler sırayla, doğrudan `gelistirme` dalında yeniden yazılıyor; her paket sonunda push.
 - 2026-10-17: **A bitti.** 496 backend testi geçti, ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0007_drug_catalog` upgrade/downgrade/upgrade ve seed denendi; tarayıcıda ilaç ekleme (öneri seçimi, listede olmayan ilaç uyarısı, hekim rozeti) doğrulandı.
+- 2026-10-17: **B bitti.** 529 backend testi geçti (gerçek Redis'le Lua testi dahil), ruff temiz; frontend lint/tsc/build temiz. PostgreSQL'de `0008_idempotency` upgrade/downgrade/upgrade denendi. Tarayıcıda: tüm trafik `/v1`'den, ikinci ziyarette 304, doz işaretlemede Idempotency-Key gidiyor, `/health/ready` Redis+DB+migration "ok". Koça mesaj genel istek sınırından muaf (acil yanıt asla engellenmez). Belge: `docs/M2/api-platform.md`.

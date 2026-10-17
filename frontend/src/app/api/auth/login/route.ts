@@ -1,5 +1,5 @@
 import { NextResponse } from "next/server";
-import { API_URL, clientIpFrom, setAuthCookies, type TokenPair } from "@/lib/server";
+import { API_BASE, clientIpFrom, setAuthCookies, type TokenPair } from "@/lib/server";
 
 export async function POST(req: Request) {
   const { email, password } = await req.json();
@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const ip = clientIpFrom(req);
   if (ip) headers["X-Forwarded-For"] = ip;
 
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${API_BASE}/auth/login`, {
     method: "POST",
     headers,
     body: new URLSearchParams({ username: email ?? "", password: password ?? "" }),

@@ -22,7 +22,7 @@ def _link_catalog(db, med: Medication, catalog_id: int | None) -> None:
     if catalog_id is not None:
         row = db.get(DrugCatalog, catalog_id)
         if row is None:
-            raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Seçilen ilaç katalogda bulunamadı")
+            raise HTTPException(422, "Seçilen ilaç katalogda bulunamadı")
     else:
         row = match_exact(db, med.name)
     med.catalog_id = row.id if row else None

@@ -119,7 +119,13 @@ def _count_guardrail_action(_mapper, _connection, target: CoachMessage) -> None:
 def _route_template(scope: dict) -> str:
     route = scope.get("route")
     path = getattr(route, "path", None)
-    return path if isinstance(path, str) and path else UNMATCHED_ROUTE
+    if not isinstance(path, str) or not path:
+        return UNMATCHED_ROUTE
+    # Aynı router /v1 altında ve sürümsüz (eski) olarak iki kez bağlı; rota nesnesi önekini taşımaz.
+    # Etiket gerçek yolun sürümünü yansıtsın ki eski yolların kullanımı izlenebilsin.
+    if scope.get("path", "").startswith("/v1/") and not path.startswith("/v1/"):
+        return "/v1" + path
+    return path
 
 
 class RequestContextMiddleware:

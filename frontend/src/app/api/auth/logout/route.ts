@@ -1,9 +1,9 @@
 import { cookies } from "next/headers";
 import { NextResponse } from "next/server";
-import { API_URL, clearAuthCookies, REFRESH_COOKIE, refreshTokens, TOKEN_COOKIE } from "@/lib/server";
+import { API_BASE, clearAuthCookies, REFRESH_COOKIE, refreshTokens, TOKEN_COOKIE } from "@/lib/server";
 
 async function backendLogout(access: string, refresh: string | undefined) {
-  return fetch(`${API_URL}/auth/logout`, {
+  return fetch(`${API_BASE}/auth/logout`, {
     method: "POST",
     headers: { Authorization: `Bearer ${access}`, "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refresh ?? null }),

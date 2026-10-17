@@ -2,12 +2,13 @@ from datetime import UTC, date, datetime, timedelta
 from typing import Annotated
 from zoneinfo import ZoneInfo
 
-from fastapi import APIRouter, HTTPException, Query, status
+from fastapi import APIRouter, HTTPException, Query, Request, Response, status
 from sqlalchemy import select
 
 from app.config import get_settings
 from app.deps import DB, CurrentUser, get_patient_for_read, get_patient_for_write
 from app.models import DoseLog, Medication, MedicationSchedule
+from app.pagination import MAX_PAGE, paginate, set_next_page
 from app.schemas import DoseLogIn, DoseLogOut, TodayDoseOut
 
 router = APIRouter(prefix="/patients/{patient_id}/doses", tags=["doses"])
@@ -73,12 +74,18 @@ def log_dose(patient_id: int, data: DoseLogIn, db: DB, user: CurrentUser):
 
 @router.get("", response_model=list[DoseLogOut])
 def list_doses(
-    patient_id: int, db: DB, user: CurrentUser, days: Annotated[int, Query(ge=1, le=90)] = 30,
+    patient_id: int, db: DB, user: CurrentUser, request: Request, response: Response,
+    days: Annotated[int, Query(ge=1, le=90)] = 30,
+    limit: Annotated[int | None, Query(ge=1, le=MAX_PAGE, description="Sayfa boyutu (cursor sayfalama)")] = None,
+    cursor: Annotated[str | None, Query(description="Önceki yanıtın X-Next-Cursor değeri")] = None,
 ):
+    """Yeniden eskiye doz kayıtları. `limit` verilirse sayfalanır; sonraki sayfa `X-Next-Cursor` / `Link`."""
     get_patient_for_read(db, user, patient_id)
     since = local_today() - timedelta(days=days - 1)
-    return db.scalars(
-        select(DoseLog)
-        .where(DoseLog.patient_id == patient_id, DoseLog.scheduled_date >= since)
-        .order_by(DoseLog.scheduled_date.desc())
-    ).all()
+    q = select(DoseLog).where(DoseLog.patient_id == patient_id, DoseLog.scheduled_date >= since)
+    if limit is None and cursor is None:
+        return db.scalars(q.order_by(DoseLog.scheduled_date.desc(), DoseLog.id.desc())).all()
+    limit = limit or 50
+    rows, nxt = paginate(db, q, [DoseLog.scheduled_date, DoseLog.id], descending=True, cursor=cursor, limit=limit)
+    set_next_page(response, request, nxt, limit)
+    return rows

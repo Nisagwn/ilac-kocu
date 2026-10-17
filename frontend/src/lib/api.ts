@@ -39,17 +39,31 @@ function detailToMessage(detail: unknown): string {
   return "Beklenmeyen bir hata oluştu";
 }
 
+const WRITE_METHODS = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+
+/** Yazma isteklerine benzersiz Idempotency-Key: ağ hatasında tekrar gönderilen istek iki kez işlenmez. */
+function idempotencyKey(): string {
+  return typeof crypto !== "undefined" && "randomUUID" in crypto
+    ? crypto.randomUUID()
+    : `${Date.now().toString(36)}-${Math.random().toString(36).slice(2, 12)}`;
+}
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
+  const method = (init.method ?? "GET").toUpperCase();
+  const headers: Record<string, string> = { "Content-Type": "application/json" };
+  if (WRITE_METHODS.has(method)) headers["Idempotency-Key"] = idempotencyKey();
   const res = await fetch(`/api/proxy${path}`, {
     ...init,
-    headers: { "Content-Type": "application/json", ...init.headers },
+    headers: { ...headers, ...init.headers },
   });
   if (res.status === 401 && typeof window !== "undefined") {
     window.location.href = "/giris";
   }
   if (!res.ok) {
     const body = await res.json().catch(() => ({}));
-    throw new ApiError(res.status, detailToMessage(body.detail));
+    const retryAfter = res.status === 429 ? res.headers.get("retry-after") : null;
+    const msg = detailToMessage(body.detail);
+    throw new ApiError(res.status, retryAfter ? `${msg} (${retryAfter} sn sonra)` : msg);
   }
   if (res.status === 204) return undefined as T;
   return res.json();

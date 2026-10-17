@@ -342,3 +342,26 @@ class AccessLog(Base):
     action: Mapped[str] = mapped_column(String(20))  # read | write
     path: Mapped[str] = mapped_column(String(255))
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
+
+
+class IdempotencyKey(Base):
+    """Idempotency-Key ile gelen yazma isteklerinin sonucu (app/services/idempotency.py).
+
+    Aynı kullanıcı aynı anahtarla aynı isteği tekrarlarsa işlem yeniden yapılmaz, saklanan yanıt döner.
+    `status_code` NULL: istek hâlâ işleniyor. Yanıt gövdesi sağlık verisi içerebilir: kayıtlar
+    IDEMPOTENCY_TTL_HOURS sonra silinir, kullanıcı silinince de silinir.
+    """
+
+    __tablename__ = "idempotency_keys"
+    __table_args__ = (UniqueConstraint("user_id", "key", name="uq_idempotency_user_key"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    user_id: Mapped[int] = mapped_column(ForeignKey("users.id", ondelete="CASCADE"))
+    key: Mapped[str] = mapped_column(String(255))
+    method: Mapped[str] = mapped_column(String(10))
+    path: Mapped[str] = mapped_column(String(255))
+    request_hash: Mapped[str] = mapped_column(String(64))  # yöntem + yol + gövdenin SHA-256 özeti
+    status_code: Mapped[int | None] = mapped_column(Integer)
+    response_body: Mapped[str | None] = mapped_column(Text)
+    response_headers: Mapped[dict | None] = mapped_column(JSON)
+    created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)

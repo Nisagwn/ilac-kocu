@@ -4,6 +4,8 @@ FastAPI uygulaması (`backend/app/main.py`). Etkileşimli belge: **Swagger UI** 
 
 Sütun "Kilometre taşı": uç noktanın hangi aşamada eklendiği. **M2** çekirdek CRUD'dur; diğerleri sonradan eklendi.
 
+> **Sürüm:** tüm uçlar `/v1` önekiyle yayınlanır (ör. `/v1/patients/{id}/measurements`). Aşağıdaki tablolarda önek kısalık için yazılmamıştır. Sürümsüz eski yollar geriye dönük çalışır, şemada görünmez ve `Deprecation: true` + `Link: </v1/...>; rel="successor-version"` başlıklarını taşır. Sağlık ve metrik uçları (`/health*`, `/metrics`) sürümsüzdür. Platform davranışları (istek sınırı, idempotency, ETag, sayfalama): [api-platform.md](api-platform.md).
+
 ## 1. Kimlik doğrulama akışı
 
 1. `POST /auth/register` ile hesap açılır (hasta için `consent: true` zorunlu).
@@ -167,7 +169,17 @@ Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 
 | Metot | Yol | Rol | Açıklama | Kilometre taşı |
 |---|---|---|---|---|
-| GET | `/health` | herkese açık | `{"status":"ok"}` | M2 |
+| GET | `/health` | herkese açık | `{"status":"ok"}` (eski canlılık ucu) | M2 |
+| GET | `/health/live` | herkese açık | Süreç ayakta: `{"status":"ok"}` | M5 |
+| GET | `/health/ready` | herkese açık | Veritabanı, Redis (tanımlıysa) ve şema (alembic head) kontrolü; biri bozuksa 503 + bileşen durumu | M5 |
+
+### collections (spec yolları)
+
+| Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
+|---|---|---|---|---|---|
+| GET | `/medications?patient_id=` | P, H, B | Hasta-merkezli yolun düz karşılığı; hasta için `patient_id` isteğe bağlı | 404 yetkisiz/bilinmeyen hasta, 422 hekim/bakım veren `patient_id` vermedi | M5 |
+| GET | `/doses?patient_id=&limit=&cursor=` | P, H, B | Aynı | aynı | M5 |
+| GET | `/measurements?patient_id=&type=&limit=&cursor=` | P, H, B | Aynı | aynı | M5 |
 
 ## 5. Örnek istek ve yanıtlar
 
