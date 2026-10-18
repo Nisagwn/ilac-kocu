@@ -1,11 +1,11 @@
 "use client";
 
 import { useCallback, useState } from "react";
-import { Clock, Pencil, Pill, Plus, PowerOff, RotateCcw } from "lucide-react";
+import { Clock, Pencil, Pill, Plus, PowerOff, RotateCcw, TriangleAlert } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Card, CardContent, CardHeader, CardTitle } from "@/components/ui/card";
 import { api } from "@/lib/api";
-import type { Medication, MedicationIn } from "@/lib/types";
+import type { Medication, MedicationCatalogFields, MedicationIn } from "@/lib/types";
 import { DrugInfoButton } from "./drug-info";
 import { MedicationForm } from "./medication-form";
 import { ErrorState, LoadingState, PageHeader } from "./states";
@@ -14,6 +14,9 @@ import { describeDays, errorMessage, hhmm } from "./utils";
 
 
 type Editing = { mode: "new" } | { mode: "edit"; id: number } | null;
+
+/** Katalogla doğrulanmamış (serbest metinle eklenmiş) ilaç mı? Alan yoksa (eski API) doğrulanmış sayılır. */
+const isUnverified = (m: Medication) => (m as Medication & MedicationCatalogFields).verified === false;
 
 export function MedicationsScreen({ patientId }: { patientId: number }) {
   const meds = useAsync(useCallback(() => api.medications(patientId, true), [patientId]));
@@ -149,7 +152,14 @@ export function MedicationsScreen({ patientId }: { patientId: number }) {
                     <p className="text-xs text-amber-700">Saat planı yok — hatırlatma ve uyum takibi için saat ekleyin.</p>
                   )}
                   <div className="flex flex-wrap gap-2">
-                    <DrugInfoButton name={m.active_ingredient || m.name} regionId={`drug-info-${m.id}`} />
+                    {isUnverified(m) ? (
+                      <p className="flex basis-full items-center gap-1.5 text-xs text-amber-800">
+                        <TriangleAlert className="size-3.5 shrink-0" aria-hidden />
+                        Doğrulanmamış ilaç — bilgi kartı gösterilemez. Düzenle ile ilacı listeden seçebilirsiniz.
+                      </p>
+                    ) : (
+                      <DrugInfoButton name={m.active_ingredient || m.name} regionId={`drug-info-${m.id}`} />
+                    )}
                     <Button variant="outline" size="sm" onClick={() => startEdit({ mode: "edit", id: m.id })}>
                       <Pencil /> Düzenle
                     </Button>
