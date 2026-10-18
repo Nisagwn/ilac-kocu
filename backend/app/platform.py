@@ -364,7 +364,7 @@ class IdempotencyMiddleware:
 def purge_expired_idempotency_keys(db: Session, older_than: timedelta | None = None) -> int:
     """Süresi dolan Idempotency-Key kayıtlarını siler (worker'dan periyodik çağrılabilir); silinen sayı."""
     cutoff = datetime.now(UTC) - (older_than if older_than is not None else _ttl())
-    result = db.execute(delete(IdempotencyKey).where(IdempotencyKey.created_at < cutoff))
+    result = db.execute(delete(IdempotencyKey).where(IdempotencyKey.created_at <= cutoff))
     db.commit()
     return result.rowcount or 0
 
