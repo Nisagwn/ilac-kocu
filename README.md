@@ -77,14 +77,16 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 
 ```bash
 cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
-docker compose up --build                     # PostgreSQL + pgvector, Redis, API, web — migration otomatik
+docker compose up --build                     # PostgreSQL + pgvector, Redis, nginx, API ×3, web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
 
 | Adres | |
 |---|---|
-| http://localhost:3000 | Uygulama (PWA) |
-| http://localhost:8000/docs | Swagger / OpenAPI |
+| http://localhost | Uygulama (PWA) — nginx tek giriş noktası (80 doluysa `HTTP_PORT=8088`) |
+| http://localhost:8000/docs | Swagger / OpenAPI (nginx iç API ağ geçidi, yalnız yerel) |
+
+Altyapı (yük dengeleme, Prometheus/Grafana/Jaeger, TLS): [`infra/README.md`](infra/README.md) · yük testi: [`docs/yuk-testi.md`](docs/yuk-testi.md)
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 

@@ -1,0 +1,2 @@
+# Kabuk betikleri Windows'ta da LF ile çıkarılsın (CRLF 'set -eu' satırını bozar)
+*.sh text eol=lf
