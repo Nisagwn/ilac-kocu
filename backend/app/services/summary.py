@@ -24,8 +24,8 @@ def get_narrative_client():
     return None
 
 
-def weekly_summary(db: Session, patient_id: int, days: int = 7, llm_client=None) -> dict:
-    now = datetime.now(UTC)
+def weekly_summary(db: Session, patient_id: int, days: int = 7, llm_client=None, now: datetime | None = None) -> dict:
+    now = now or datetime.now(UTC)
     since = now - timedelta(days=days)
     adh = get_adherence(db, patient_id, days, now=now)
     stats = db.execute(

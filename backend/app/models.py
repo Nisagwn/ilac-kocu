@@ -371,3 +371,22 @@ class IdempotencyKey(Base):
     response_status: Mapped[int | None] = mapped_column(Integer)
     response_body: Mapped[dict | list | None] = mapped_column(JSON)
     created_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow, index=True)
+
+
+class WeeklySummary(Base):
+    """Zamanlanmış haftalık hasta özeti (her pazartesi 07:00, lider worker; app/services/weekly_summaries.py).
+
+    `data` GET /summaries yanıtıyla aynı biçimdedir (uyum, ölçüm istatistikleri, anlatı). Aynı hasta ve dönem
+    için tek kayıt tutulur: iş iki kez çalışsa da (lider değişimi) kopya oluşmaz.
+    """
+
+    __tablename__ = "weekly_summaries"
+    __table_args__ = (UniqueConstraint("patient_id", "period_end", name="uq_weekly_summary_patient_period"),)
+
+    id: Mapped[int] = mapped_column(primary_key=True)
+    patient_id: Mapped[int] = mapped_column(ForeignKey("patients.id", ondelete="CASCADE"), index=True)
+    period_start: Mapped[date] = mapped_column(Date)
+    period_end: Mapped[date] = mapped_column(Date)  # dahil; yerel takvim günü
+    data: Mapped[dict] = mapped_column(JSON)
+    narrative_source: Mapped[str | None] = mapped_column(String(20))
+    generated_at: Mapped[datetime] = mapped_column(DateTime(timezone=True), default=utcnow)
