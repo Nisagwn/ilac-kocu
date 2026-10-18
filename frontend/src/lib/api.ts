@@ -110,3 +110,9 @@ export const insightsApi = {
   rejectEducation: (contentId: number) =>
     request<EducationContent>(`/education/${contentId}/reject`, { method: "POST" }),
 };
+
+// --- İlaç kataloğu ---
+export const drugCatalogApi = {
+  search: (q: string, limit = 8, signal?: AbortSignal) =>
+    request<import("./types").DrugSearchResult[]>(`/drugs/search?q=${encodeURIComponent(q)}&limit=${limit}`, { signal }),
+};

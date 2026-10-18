@@ -12,7 +12,7 @@ router = APIRouter(prefix="/patients/{patient_id}/medications", tags=["medicatio
 def _catalog_entry(db, catalog_id: int) -> DrugCatalog:
     entry = db.get(DrugCatalog, catalog_id)
     if entry is None:
-        raise HTTPException(status.HTTP_422_UNPROCESSABLE_ENTITY, "Seçilen ilaç katalogda bulunamadı")
+        raise HTTPException(422, "Seçilen ilaç katalogda bulunamadı")
     return entry
 
 

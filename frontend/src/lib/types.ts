@@ -256,3 +256,22 @@ export interface EducationContent {
   embedding_model: string | null;
   created_at: string;
 }
+
+// --- İlaç kataloğu (GET /drugs/search; medications.catalog_id / verified) ---
+export interface DrugSearchResult {
+  id: number;
+  display_name: string;
+  generic_name: string;
+  /** Sorguyla eşleşen ticari ad; etken maddeyle eşleştiyse null. */
+  matched_brand: string | null;
+  tr_brand_names: string[];
+  pharm_class: string | null;
+  source: "tr_curated" | "openfda";
+  openfda_available: boolean;
+}
+
+/** Backend MedicationOut / MedicationIn katalog alanları (Medication / MedicationIn ile kesişim olarak). */
+export interface MedicationCatalogFields {
+  catalog_id?: number | null;
+  verified?: boolean;
+}
