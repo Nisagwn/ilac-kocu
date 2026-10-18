@@ -34,6 +34,9 @@ export interface PatientSummary {
   open_alerts: number;
   critical_alerts: number;
   last_measurement_at: string | null;
+  /** Bu hafta − geçen hafta uyum farkı (yüzde puan); veri yoksa null. */
+  adherence_trend_delta?: number | null;
+  adherence_trend_direction?: TrendDirection | null;
 }
 
 export interface Schedule {
@@ -182,3 +185,96 @@ export interface WeeklySummary {
 export interface DrugLabel {
   [key: string]: unknown;
 }
+
+// --- Klinik içgörüler (GET /patients/{id}/insights) ---------------------------------------
+export type TrendDirection = "up" | "down" | "flat";
+
+export interface AdherenceTrend {
+  current_start: string;
+  current_end: string;
+  previous_start: string;
+  previous_end: string;
+  current_score: number | null;
+  previous_score: number | null;
+  current_percent: number | null;
+  previous_percent: number | null;
+  delta_points: number | null;
+  direction: TrendDirection | null;
+}
+
+export interface TargetStats {
+  count: number;
+  in_target: number;
+  in_target_ratio: number | null;
+  avg: number | null;
+  avg_diastolic: number | null;
+}
+
+export interface TargetWindows {
+  target: string;
+  window_30d: TargetStats;
+  window_7d: TargetStats;
+}
+
+export type SkipCategoryKey = "yan_etki" | "ilac_bitti" | "unuttum" | "iyi_hissetti" | "diger";
+
+export interface ClinicalInsights {
+  patient_id: number;
+  as_of: string;
+  adherence_trend: AdherenceTrend;
+  targets: Record<MeasurementType, TargetWindows>;
+  skip_reasons: {
+    window_days: number;
+    total: number;
+    categories: { key: SkipCategoryKey; label: string; count: number; percent: number }[];
+  };
+  measurement_frequency: {
+    window_days: number;
+    days_with_measurement: number;
+    min_expected_days: number;
+    low_data: boolean;
+  };
+  disclaimer: string;
+}
+
+// --- Eğitim içeriği onayı (/education) -------------------------------------------------------
+export type ReviewStatus = "pending" | "approved" | "rejected";
+
+export interface EducationContent {
+  id: number;
+  title: string;
+  body: string;
+  source_name: string;
+  source_url: string | null;
+  tags: string | null;
+  kind: "curated" | "openfda";
+  drug_key: string | null;
+  reviewed: boolean;
+  review_status: ReviewStatus;
+  reviewed_by: number | null;
+  reviewed_at: string | null;
+  embedding_model: string | null;
+  created_at: string;
+}
+
+// --- İlaç kataloğu (GET /drugs/search; medications.catalog_id / verified) ---
+export interface DrugSearchResult {
+  id: number;
+  display_name: string;
+  generic_name: string;
+  /** Sorguyla eşleşen ticari ad; etken maddeyle eşleştiyse null. */
+  matched_brand: string | null;
+  tr_brand_names: string[];
+  pharm_class: string | null;
+  source: "tr_curated" | "openfda";
+  openfda_available: boolean;
+}
+
+/** Backend MedicationOut / MedicationIn katalog alanları (Medication / MedicationIn ile kesişim olarak). */
+export interface MedicationCatalogFields {
+  catalog_id?: number | null;
+  verified?: boolean;
+}
+
+// Cursor sayfalı yeni /v1 uçlarının yanıtı (ör. /v1/measurements, /v1/doses)
+export type Page<T> = { items: T[]; next_cursor: string | null };

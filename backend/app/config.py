@@ -22,6 +22,12 @@ class Settings(BaseSettings):
     login_email_window_seconds: int = 900
     register_ip_limit: int = 5  # IP başına saatlik kayıt
     register_ip_window_seconds: int = 3600
+    # --- Kullanıcı başına genel istek sınırı (token bucket, app/platform.py) ---
+    rate_limit_enabled: bool = True  # testlerde kapalı (tests/conftest.py)
+    rate_limit_write_per_minute: int = 60  # POST/PUT/PATCH/DELETE
+    rate_limit_read_per_minute: int = 300  # GET/HEAD
+    rate_limit_coach_per_minute: int = 10  # POST /coach/chat ve /coach/jobs (acil belirti mesajları hariç)
+    idempotency_ttl_hours: int = 24  # Idempotency-Key kayıtlarının saklanma süresi
     # X-Forwarded-For yalnızca bu adreslerden (IP ya da CIDR) gelen isteklerde dikkate alınır.
     # Varsayılan: aynı makinedeki Next.js sunucusu. Docker'da web konteynerinin ağı eklenmeli
     # (ör. ["172.16.0.0/12"]) ve API portu dışarıya açılmamalıdır.
@@ -59,7 +65,27 @@ class Settings(BaseSettings):
 
     # --- Asenkron koç işleri (POST /coach/jobs, app/worker.py) ---
     coach_job_stale_minutes: int = 10  # bu süreden uzun "running" kalan işler işçi açılışında kurtarılır
-    coach_job_max_attempts: int = 2  # bu kadar denemeden sonra iş kural tabanlı yanıtla kapatılır
+    # En fazla bu kadar deneme (üstel bekleme: base, 2*base, ...); sonra iş DLQ'ya (Redis "coach:jobs:dlq")
+    # alınır, durumu "failed" olur ve hastaya güvenli yedek yanıt yazılır
+    coach_job_max_attempts: int = 3
+    coach_job_backoff_seconds: float = 2.0
+
+    # --- Dayanıklılık: devre kesici (app/services/circuit_breaker.py) ---
+    circuit_breaker_enabled: bool = True
+    circuit_breaker_failure_threshold: int = 5  # window içinde bu kadar hata -> devre açılır
+    circuit_breaker_window_seconds: int = 60
+    circuit_breaker_recovery_seconds: int = 30  # açık kalma süresi; sonra tek deneme (yarı açık)
+
+    # --- Worker lider seçimi (PostgreSQL advisory lock; SQLite'ta her zaman lider) ---
+    leader_lock_id: int = 724_311_001  # pg_try_advisory_lock anahtarı
+    leader_retry_seconds: int = 15  # lider olmayan kopya bu aralıkla kilidi yeniden dener
+
+    # --- Zamanlanmış haftalık özet (liderde) ---
+    weekly_summary_enabled: bool = True
+    # APScheduler cron alanları; saat dilimi settings.timezone (varsayılan Europe/Istanbul)
+    weekly_summary_day_of_week: str = "mon"
+    weekly_summary_hour: int = 7
+    weekly_summary_minute: int = 0
 
     # --- M4: LLM koç ---
     # Sağlayıcı: "auto" (OPENROUTER_API_KEY varsa OpenRouter, yoksa ANTHROPIC_API_KEY varsa Anthropic),

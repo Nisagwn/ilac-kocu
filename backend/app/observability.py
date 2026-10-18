@@ -22,7 +22,7 @@ from contextvars import ContextVar
 from dataclasses import dataclass
 
 from fastapi import APIRouter, Request, Response
-from prometheus_client import CONTENT_TYPE_LATEST, Counter, Histogram, generate_latest
+from prometheus_client import CONTENT_TYPE_LATEST, Counter, Gauge, Histogram, generate_latest
 from sqlalchemy import event
 
 from app.config import get_settings
@@ -60,7 +60,7 @@ HTTP_REQUESTS = Counter("http_requests", "HTTP istek sayısı", ["method", "rout
 LLM_REQUEST_DURATION = Histogram(
     "llm_request_duration_seconds",
     "LLM isteği süresi (koç yanıtı/özet anlatısı, tüm tool-use turları dahil)",
-    ["purpose", "model", "outcome"],  # outcome: ok | fallback | budget_exceeded | error
+    ["purpose", "model", "outcome"],  # outcome: ok | fallback | budget_exceeded | circuit_open | error
     buckets=_LLM_BUCKETS,
 )
 LLM_TOKENS = Counter("llm_tokens", "LLM token kullanımı", ["purpose", "model", "kind"])
@@ -68,6 +68,27 @@ LLM_COST_USD = Counter("llm_cost_usd", "LLM maliyeti (USD)", ["purpose", "model"
 LLM_RATE_LIMITED = Counter("llm_rate_limited", "Sağlayıcıdan alınan 429 yanıtları (yeniden denemeler dahil)")
 COACH_GUARDRAIL_ACTIONS = Counter(
     "coach_guardrail_actions", "Koç yanıtlarındaki guardrail eylemleri", ["action"])
+
+# Dayanıklılık (app/services/circuit_breaker.py, app/services/jobs.py)
+CIRCUIT_BREAKER_STATE = Gauge(
+    "circuit_breaker_state", "Devre kesici durumu (0 kapalı, 1 yarı açık, 2 açık)", ["name"])
+CIRCUIT_BREAKER_OPENED = Counter("circuit_breaker_opened", "Devre kesicinin açılma sayısı", ["name"])
+COACH_JOB_RETRIES = Counter("coach_job_retries", "Yeniden denemeye alınan koç işleri")
+COACH_DLQ_SIZE = Gauge("coach_dlq_size", "Koç işleri dead-letter kuyruğundaki iş sayısı")
+
+
+def record_breaker_state(name: str, value: int, opened: bool = False) -> None:
+    CIRCUIT_BREAKER_STATE.labels(name).set(value)
+    if opened:
+        CIRCUIT_BREAKER_OPENED.labels(name).inc()
+
+
+def set_dlq_size(n: int) -> None:
+    COACH_DLQ_SIZE.set(n)
+
+
+def record_job_retry() -> None:
+    COACH_JOB_RETRIES.inc()
 
 
 @dataclass
@@ -182,3 +203,93 @@ def metrics(request: Request) -> Response:
         if scheme.lower() != "bearer" or not hmac.compare_digest(given.strip().encode(), s.metrics_token.encode()):
             return Response(status_code=401, headers={"WWW-Authenticate": "Bearer"})
     return Response(content=generate_latest(), media_type=CONTENT_TYPE_LATEST)
+
+
+# ---------------------------------------------------------------- OpenTelemetry (dağıtık izleme)
+# Yalnızca OTEL_EXPORTER_OTLP_ENDPOINT tanımlıysa açılır (ör. http://jaeger:4318); yoksa hiçbir şey yapmaz,
+# paketler bile içe aktarılmaz (testler ve varsayılan kurulum etkilenmez).
+# Gizlilik: istek/yanıt gövdeleri ve başlıklar span'lere yazılmaz; sorgu dizeleri (ör. /education/search?q=...)
+# kancalarla silinir; SQL yalnızca parametresiz metin, Redis komutları argümansız ("GET ?") kaydedilir.
+_URL_ATTRS = ("http.url", "url.full", "http.target")
+_tracing_state = {"global": False}
+
+
+def _strip_query(value: str) -> str:
+    return value.split("?", 1)[0]
+
+
+def scrub_span_urls(span) -> None:
+    """Span'deki URL özniteliklerinden sorgu dizesini siler (değerler sağlık verisi içerebilir)."""
+    if span is None or not span.is_recording():
+        return
+    attrs = getattr(span, "attributes", None) or {}
+    for key in _URL_ATTRS:
+        value = attrs.get(key)
+        if isinstance(value, str) and "?" in value:
+            span.set_attribute(key, _strip_query(value))
+    if attrs.get("url.query"):
+        span.set_attribute("url.query", "")
+
+
+def _server_request_hook(span, _scope) -> None:
+    scrub_span_urls(span)
+
+
+def _httpx_request_hook(span, _request) -> None:
+    scrub_span_urls(span)
+
+
+async def _httpx_async_request_hook(span, _request) -> None:
+    scrub_span_urls(span)
+
+
+def setup_tracing(app=None, service_name: str = "ilac-kocu-api") -> bool:
+    """OTLP izlemeyi başlatır: FastAPI (app verilirse) + SQLAlchemy + httpx + redis otomatik enstrümantasyonu.
+
+    Servis adı OTEL_SERVICE_NAME ile ezilebilir; `service.instance.id` konteynerin ana makine adıdır
+    (Jaeger'de hangi API kopyasının yanıt verdiği görünür). Döndürür: izleme açıldıysa True.
+    """
+    import os
+
+    if not os.environ.get("OTEL_EXPORTER_OTLP_ENDPOINT", "").strip():
+        return False
+    try:
+        import socket
+
+        from opentelemetry import trace
+        from opentelemetry.exporter.otlp.proto.http.trace_exporter import OTLPSpanExporter
+        from opentelemetry.instrumentation.httpx import HTTPXClientInstrumentor
+        from opentelemetry.instrumentation.redis import RedisInstrumentor
+        from opentelemetry.instrumentation.sqlalchemy import SQLAlchemyInstrumentor
+        from opentelemetry.sdk.resources import Resource
+        from opentelemetry.sdk.trace import TracerProvider
+        from opentelemetry.sdk.trace.export import BatchSpanProcessor
+    except ImportError:  # pragma: no cover - paketler requirements.txt'te sabitli
+        logging.getLogger(__name__).warning("OpenTelemetry paketleri kurulu değil; izleme kapalı")
+        return False
+
+    if not _tracing_state["global"]:
+        provider = TracerProvider(resource=Resource.create({
+            "service.name": os.environ.get("OTEL_SERVICE_NAME") or service_name,
+            "service.instance.id": socket.gethostname(),
+        }))
+        # Uç nokta OTEL_EXPORTER_OTLP_ENDPOINT'ten okunur (http/protobuf; /v1/traces otomatik eklenir)
+        provider.add_span_processor(BatchSpanProcessor(OTLPSpanExporter()))
+        trace.set_tracer_provider(provider)
+
+        from app.db import engine
+
+        SQLAlchemyInstrumentor().instrument(engine=engine, enable_commenter=False)
+        HTTPXClientInstrumentor().instrument(
+            request_hook=_httpx_request_hook, async_request_hook=_httpx_async_request_hook)
+        RedisInstrumentor().instrument()  # komut argümanları kütüphanece "?" ile maskelenir
+        _tracing_state["global"] = True
+
+    if app is not None:
+        from opentelemetry.instrumentation.fastapi import FastAPIInstrumentor
+
+        FastAPIInstrumentor.instrument_app(
+            app, excluded_urls="health,metrics", server_request_hook=_server_request_hook,
+            exclude_spans=["receive", "send"],
+        )
+    return True

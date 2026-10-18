@@ -21,6 +21,7 @@ from app.config import Settings, get_settings
 from app.observability import observe_llm
 from app.redis_client import get_redis
 from app.services import guardrails as gr
+from app.services.circuit_breaker import CircuitOpenError, llm_breaker
 from app.services.llm.budget import UsageTotals, check_budget, record_usage
 from app.services.llm.client import LlmError, create_message, get_client, text_of
 from app.services.llm.patient_data import MEASUREMENT_LABELS
@@ -198,12 +199,20 @@ def generate_narrative(db: Session, patient_id: int, facts: dict, client=None,
         return cached
 
     result: tuple[str | None, str | None] = (template_narrative(facts), "template")
+    cacheable = True
     if s.llm_enabled or client is not None:
         with observe_llm(PURPOSE, s.model_name) as obs:
-            decision = check_budget(db, patient_id, PURPOSE, s, now)
-            if decision.allowed:
+            breaker = llm_breaker()
+            decision = check_budget(db, patient_id, PURPOSE, s, now) if breaker.state != "open" else None
+            if decision is None:
+                # Devre açık: sağlayıcıyı beklemeden şablon; önbelleğe yazılmaz (devre kapanınca LLM denensin)
+                obs.outcome, cacheable = "circuit_open", False
+            elif decision.allowed:
                 try:
-                    result = (_llm_narrative(db, patient_id, facts, client, s), "llm")
+                    with breaker.guard(ignore=(LlmError,)):
+                        result = (_llm_narrative(db, patient_id, facts, client, s), "llm")
+                except CircuitOpenError:
+                    obs.outcome, cacheable = "circuit_open", False
                 except Exception as exc:
                     obs.outcome = "fallback"
                     logger.warning("LLM özet anlatısı başarısız (%s), şablon kullanılıyor", type(exc).__name__)
@@ -211,5 +220,6 @@ def generate_narrative(db: Session, patient_id: int, facts: dict, client=None,
                 obs.outcome = "budget_exceeded"
                 logger.info("Özet anlatısı için LLM bütçesi uygun değil (%s)", decision.reason)
 
-    _cache_set(key, result)
+    if cacheable:
+        _cache_set(key, result)
     return result

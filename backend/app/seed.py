@@ -7,6 +7,8 @@ Oluşturulan hesaplar (şifre: demo12345):
   + hekime atanmış 4 sentetik hasta (farklı uyum/risk profilleri; hekim panelini anlamlı kılmak için)
 
 Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir.
+Kürate Türkçe ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada upsert edilir (çevrimdışı);
+openFDA senkronu ayrı ve isteğe bağlıdır: python -m app.scripts.sync_drug_catalog
 """
 
 import random
@@ -35,6 +37,7 @@ from app.models import (
     User,
 )
 from app.security import hash_password
+from app.services.drug_catalog import link_unverified_medications, seed_catalog
 from app.services.rag.search import ensure_embeddings
 
 PW = "demo12345"
@@ -66,19 +69,26 @@ def seed_education(db: Session, path: Path = EDUCATION_YAML) -> tuple[int, int]:
         if title not in titles:
             db.delete(row)
     for it in items:
+        yaml_reviewed = bool(it.get("reviewed", False))
         values = {
             "body": it["body"].strip(),
             "source_name": it["source_name"],
             "source_url": it.get("source_url"),
             "tags": it.get("tags"),
-            "reviewed": bool(it.get("reviewed", False)),
         }
+        review = {"reviewed": yaml_reviewed, "review_status": "approved" if yaml_reviewed else "pending"}
         row = existing.get(it["title"])
         if row is None:
-            db.add(EducationContent(title=it["title"], kind="curated", **values))
+            db.add(EducationContent(title=it["title"], kind="curated", **values, **review))
             created += 1
-        elif any(getattr(row, k) != v for k, v in values.items()):
-            text_changed = (row.body, row.tags) != (values["body"], values["tags"])
+            continue
+        text_changed = (row.body, row.tags) != (values["body"], values["tags"])
+        if row.reviewed_by is not None and not text_changed:
+            review = {}  # hekimin onay/ret kararı YAML'daki varsayılandan önceliklidir
+        elif row.reviewed_by is not None:
+            review |= {"reviewed_by": None, "reviewed_at": None}  # karar eski metne aitti: yeniden onay
+        values |= review
+        if any(getattr(row, k) != v for k, v in values.items()):
             for k, v in values.items():
                 setattr(row, k, v)
             if text_changed:
@@ -94,6 +104,9 @@ def run() -> None:
     db = SessionLocal()
     created, updated = seed_education(db)
     print(f"Eğitim içeriği: {created} eklendi, {updated} güncellendi.")
+    created, updated = seed_catalog(db)
+    print(f"İlaç kataloğu (kürate TR): {created} eklendi, {updated} güncellendi. "
+          "openFDA senkronu isteğe bağlı: python -m app.scripts.sync_drug_catalog")
     if db.scalar(select(User).where(User.email == "hasta@demo.local")):
         print("Demo verisi zaten var.")
         return
@@ -142,6 +155,8 @@ def run() -> None:
     for profile in EXTRA_PATIENTS:
         _add_extra_patient(db, rnd, doc.id, today, **profile)
 
+    db.flush()
+    link_unverified_medications(db)  # demo ilaçları (Glifor, Norvasc, Coversyl) katalogla doğrulanır
     db.commit()
     print("Demo verisi oluşturuldu. Şifre:", PW)
 

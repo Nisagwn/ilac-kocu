@@ -1,45 +1,24 @@
 """openFDA Drug Label API istemcisi.
 
 openFDA ABD etiketlerini döndürür; Türkiye'deki ticari isimler bulunmaz. Bu yüzden önce
-TR ticari isim -> etken madde eşlemesi yapılır, sorgu etken madde (generic_name) üzerinden atılır.
+TR ticari isim -> etken madde eşlemesi yapılır (kürate katalog: app/data/drug_catalog_tr.yaml,
+bkz. app/services/drug_catalog.py), sorgu etken madde (generic_name) üzerinden atılır.
+Kombinasyonlarda ("metformin + sitagliptin") her bileşen ayrı ifadeyle AND'lenir.
 """
 
 import json
 import logging
+from urllib.parse import quote
 
 import httpx
 
 from app.config import get_settings
 from app.redis_client import get_redis
-from app.services.guardrails import normalize
-
-# Küçük, kürate eşleme tablosu (genişletilebilir). Anahtarlar normalize edilmiş.
-TR_BRAND_TO_GENERIC = {
-    "glifor": "metformin",
-    "glucophage": "metformin",
-    "matofin": "metformin",
-    "diaformin": "metformin",
-    "amaryl": "glimepiride",
-    "diamicron": "gliclazide",
-    "januvia": "sitagliptin",
-    "galvus": "vildagliptin",
-    "jardiance": "empagliflozin",
-    "forziga": "dapagliflozin",
-    "norvasc": "amlodipine",
-    "coversyl": "perindopril",
-    "delix": "ramipril",
-    "beloc": "metoprolol",
-    "concor": "bisoprolol",
-    "micardis": "telmisartan",
-    "diovan": "valsartan",
-    "atacand": "candesartan",
-    "lasix": "furosemide",
-    "lipitor": "atorvastatin",
-    "ator": "atorvastatin",
-}
+from app.services import drug_catalog
 
 MAX_FIELD_CHARS = 1200
 CACHE_TTL_SECONDS = 24 * 3600
+STALE_TTL_SECONDS = 30 * 24 * 3600  # openFDA kullanılamazken dönülecek son etiketin saklanma süresi
 
 log = logging.getLogger(__name__)
 
@@ -53,8 +32,8 @@ class OpenFDAUnavailable(Exception):
 
 
 def resolve_generic(name: str) -> str:
-    key = normalize(name).split()[0] if name.strip() else ""
-    return TR_BRAND_TO_GENERIC.get(key, key)
+    """İlaç adı (TR ticari ad, etken madde, "Glifor 1000 mg") -> etken madde anahtarı. Katalogdan beslenir."""
+    return drug_catalog.resolve_name(name)
 
 
 def _first(label: dict, field: str) -> str | None:
@@ -77,7 +56,7 @@ def parse_label(query: str, generic: str, label: dict) -> dict:
         "warnings": _first(label, "warnings_and_cautions") or _first(label, "warnings"),
         "drug_interactions": _first(label, "drug_interactions"),
         "source_name": "openFDA Drug Label API (ABD FDA etiketi)",
-        "source_url": f"https://api.fda.gov/drug/label.json?search=openfda.generic_name:\"{generic}\"",
+        "source_url": "https://api.fda.gov/drug/label.json?search=" + quote(drug_catalog.generic_search_expr(generic)),
         "set_id": label.get("set_id"),
         "disclaimer": "Bu bilgi ABD ilaç etiketinden alınmıştır, eğitim amaçlıdır; tedavi kararı için hekiminize danışın.",
     }
@@ -89,7 +68,7 @@ def fetch_label(name: str, client: httpx.Client | None = None) -> dict:
     if not generic:
         raise DrugLabelNotFound(name)
 
-    params = {"search": f'openfda.generic_name:"{generic}"', "limit": 1}
+    params = {"search": drug_catalog.generic_search_expr(generic), "limit": 1}
     if settings.openfda_api_key:
         params["api_key"] = settings.openfda_api_key
 
@@ -122,6 +101,7 @@ class LabelCache:
     Redis'e ulaşılamazsa sessizce süreç içi önbelleğe düşer; önbellek hatası isteği asla bozmaz."""
 
     PREFIX = "openfda:label:"
+    LAST = "last:"  # son bilinen etiket (devre açıkken yedek), STALE_TTL_SECONDS
 
     def __init__(self) -> None:
         self._memory: dict[str, dict] = {}
@@ -140,11 +120,25 @@ class LabelCache:
                 log.warning("Redis okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
         return self._memory.get(key)
 
+    def get_stale(self, key: str) -> dict | None:
+        """Son bilinen etiket (TTL'i dolmuş olabilir): openFDA kullanılamazken yedek."""
+        r = self._client()
+        if r is not None:
+            try:
+                raw = r.get(self.PREFIX + self.LAST + key)
+                if raw:
+                    return json.loads(raw)
+            except Exception:
+                log.warning("Redis okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+        return self._memory.get(key)
+
     def set(self, key: str, value: dict) -> None:
         r = self._client()
         if r is not None:
             try:
-                r.setex(self.PREFIX + key, CACHE_TTL_SECONDS, json.dumps(value, ensure_ascii=False))
+                raw = json.dumps(value, ensure_ascii=False)
+                r.setex(self.PREFIX + key, CACHE_TTL_SECONDS, raw)
+                r.setex(self.PREFIX + self.LAST + key, STALE_TTL_SECONDS, raw)
                 return
             except Exception:
                 log.warning("Redis'e yazılamadı; süreç içi önbellek kullanılıyor", exc_info=True)
@@ -167,12 +161,31 @@ class LabelCache:
 label_cache = LabelCache()
 
 
+OPENFDA_BREAKER = "openfda"
+
+
 def get_label_cached(name: str) -> dict:
-    """Önbellekli fetch_label. DrugLabelNotFound / OpenFDAUnavailable yukarı fırlatılır."""
+    """Önbellekli fetch_label. DrugLabelNotFound / OpenFDAUnavailable yukarı fırlatılır.
+
+    Devre kesici (app/services/circuit_breaker.py): openFDA art arda ulaşılamazsa devre açılır ve istek
+    atılmadan önbellekteki son etiket (TTL'i geçmiş olsa da, en fazla STALE_TTL_SECONDS) döner; o da yoksa
+    OpenFDAUnavailable. "Bulunamadı" (404) hata sayılmaz."""
+    from app.services.circuit_breaker import CircuitOpenError, get_breaker
+
     key = resolve_generic(name)
     cached = label_cache.get(key) if key else None
     if cached is not None:
         return cached
-    data = fetch_label(name)  # modül düzeyinde çözülür: testler monkeypatch edebilir
+    try:
+        with get_breaker(OPENFDA_BREAKER).guard(ignore=(DrugLabelNotFound,)):
+            data = fetch_label(name)  # modül düzeyinde çözülür: testler monkeypatch edebilir
+    except (CircuitOpenError, OpenFDAUnavailable) as exc:
+        stale = label_cache.get_stale(key) if key else None
+        if stale is not None:
+            log.info("openFDA kullanılamıyor (%s); önbellekteki son etiket döndü", type(exc).__name__)
+            return stale
+        if isinstance(exc, CircuitOpenError):
+            raise OpenFDAUnavailable("openFDA şu an kullanılamıyor (devre açık)") from exc
+        raise
     label_cache.set(key, data)
     return data

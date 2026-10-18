@@ -1,3 +1,8 @@
+# Mimari ve profiller: infra/README.md
+#   varsayılan          : db, redis, migrate, api ×3, worker, web, nginx (tek dış giriş)
+#   --profile observability : + prometheus, grafana, jaeger
+#   --profile loadtest      : + k6 (docs/yuk-testi.md)
+# Host portları ortam değişkenleriyle değiştirilebilir (HTTP_PORT, API_GATEWAY_PORT, DB_PORT, ...).
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -6,7 +11,7 @@ services:
       POSTGRES_PASSWORD: ilac
       POSTGRES_DB: ilac_kocu
     # Yalnızca yerel geliştirme için, sadece bu makineden (5432 çoğu zaman başka bir PostgreSQL ile çakışır)
-    ports: ["127.0.0.1:5433:5432"]
+    ports: ["127.0.0.1:${DB_PORT:-5433}:5432"]
     volumes: [pgdata:/var/lib/postgresql/data]
     healthcheck:
       test: ["CMD-SHELL", "pg_isready -U ilac -d ilac_kocu"]
@@ -19,7 +24,7 @@ services:
   # Şema migration'ları: API ve işçiden önce bir kez koşar, sonra çıkar
   migrate:
     build: ./backend
-    image: ilac-kocu-backend
+    image: ${BACKEND_IMAGE:-ilac-kocu-backend}
     command: ["alembic", "upgrade", "head"]
     env_file: .env
     environment:
@@ -29,17 +34,36 @@ services:
       db:
         condition: service_healthy
 
+  # FastAPI; nginx arkasında N kopya (varsayılan 3). Dışarıya port AÇILMAZ, container_name yok:
+  #   docker compose up -d --scale api=1   # tek kopya ile karşılaştırma
   api:
     build: ./backend
-    image: ilac-kocu-backend
+    image: ${BACKEND_IMAGE:-ilac-kocu-backend}
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
       REDIS_URL: redis://redis:6379/0
-      # Next.js (web) konteyneri Docker iç ağından gelir; gerçek istemci IP'sini X-Forwarded-For'da iletir
-      TRUSTED_PROXIES: '["127.0.0.1","::1","172.16.0.0/12"]'
-    # Yalnızca bu makineden (Swagger için); dışarıya açık olursa X-Forwarded-For taklit edilebilir
-    ports: ["127.0.0.1:8000:8000"]
+      # api'ye yalnızca compose iç ağından erişilir (host portu yok); bu ağdaki tek HTTP istemcisi nginx'tir.
+      # nginx dış istemcinin X-Forwarded-For'unu $remote_addr ile ezer (infra/nginx/snippets/proxy-web.conf).
+      TRUSTED_PROXIES: '["127.0.0.1","::1","172.16.0.0/12","192.168.0.0/16","10.0.0.0/8"]'
+      # Yük testi için yükseltilebilir (tüm sanal kullanıcılar tek IP'den gelir; docs/yuk-testi.md)
+      LOGIN_IP_LIMIT: ${LOGIN_IP_LIMIT:-5}
+      LOGIN_EMAIL_LIMIT: ${LOGIN_EMAIL_LIMIT:-10}
+      # OpenTelemetry: tanımlıysa izler Jaeger'e gider (ör. http://jaeger:4318); boşsa izleme kapalı
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+    deploy:
+      replicas: ${API_REPLICAS:-3}
+    expose: ["8000"]
+    # uvicorn --timeout-graceful-shutdown 20 (backend/Dockerfile); süren istekler bitene kadar SIGKILL yok
+    stop_grace_period: 30s
+    healthcheck:
+      # Canlılık: süreç ayakta mı. Hazırlık (DB/Redis/migration) için /health/ready.
+      test: ["CMD", "python", "-c", "import urllib.request; urllib.request.urlopen('http://127.0.0.1:8000/health/live', timeout=3)"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -49,13 +73,15 @@ services:
   # Koç kuyruğu işçisi + doz hatırlatma zamanlayıcısı (API zamanlayıcıyı başlatmaz)
   worker:
     build: ./backend  # migrate/api/worker aynı imajı paylaşır (derleme önbellekten gelir)
-    image: ilac-kocu-backend
+    image: ${BACKEND_IMAGE:-ilac-kocu-backend}
     command: ["python", "-m", "app.worker"]
     env_file: .env
     environment:
       DATABASE_URL: postgresql+psycopg://ilac:ilac@db:5432/ilac_kocu
       REDIS_URL: redis://redis:6379/0
+      OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     stop_grace_period: 30s
+    restart: unless-stopped
     depends_on:
       migrate:
         condition: service_completed_successfully
@@ -65,12 +91,100 @@ services:
   web:
     build: ./frontend
     environment:
-      # Sunucu tarafı proxy FastAPI'ye Docker ağı üzerinden gider; tarayıcı yalnızca web'e konuşur.
-      API_URL: http://api:8000
-    ports: ["3000:3000"]
+      # Sunucu tarafı proxy API'ye nginx'in iç ağ geçidi üzerinden gider → istekler api kopyalarına
+      # least_conn ile dağılır. Tarayıcı yalnızca nginx:80 → web ile konuşur.
+      API_URL: http://nginx:8081
+      # Next.js keep-alive süresi nginx upstream keepalive_timeout'tan (30 sn) uzun olmalı
+      KEEP_ALIVE_TIMEOUT: "65000"
+    expose: ["3000"]
+    healthcheck:
+      test: ["CMD", "node", "-e", "fetch('http://127.0.0.1:3000/manifest.webmanifest').then(r=>process.exit(r.ok?0:1)).catch(()=>process.exit(1))"]
+      interval: 10s
+      timeout: 5s
+      retries: 3
+      start_period: 20s
+    restart: unless-stopped
+
+  # Tek dış giriş noktası: :80 → web; 127.0.0.1:8000 → iç API ağ geçidi (Swagger /docs, yalnız yerel)
+  nginx:
+    build: ./infra/nginx
+    ports:
+      - "${HTTP_PORT:-80}:80"
+      - "127.0.0.1:${API_GATEWAY_PORT:-8000}:8081"
+    environment:
+      NGINX_RATE_LIMIT: ${NGINX_RATE_LIMIT:-20r/s}
+    healthcheck:
+      test: ["CMD", "wget", "-q", "-O", "/dev/null", "http://127.0.0.1/nginx-health"]
+      interval: 10s
+      timeout: 3s
+      retries: 3
+    restart: unless-stopped
     depends_on:
       api:
+        condition: service_healthy
+      web:
         condition: service_started
+
+  # ------------------------------------------------------------ gözlemlenebilirlik (--profile observability)
+  prometheus:
+    image: prom/prometheus:v3.5.0
+    profiles: [observability]
+    command:
+      - --config.file=/etc/prometheus/prometheus.yml
+      - --storage.tsdb.retention.time=7d
+      - --web.enable-remote-write-receiver   # k6 sonuçları isteğe bağlı buraya yazılabilir
+    volumes:
+      - ./infra/prometheus/prometheus.yml:/etc/prometheus/prometheus.yml:ro
+      - prometheus-data:/prometheus
+    ports: ["127.0.0.1:${PROMETHEUS_PORT:-9090}:9090"]
+    restart: unless-stopped
+
+  grafana:
+    image: grafana/grafana:12.1.1
+    profiles: [observability]
+    environment:
+      GF_SECURITY_ADMIN_USER: admin
+      GF_SECURITY_ADMIN_PASSWORD: ${GRAFANA_ADMIN_PASSWORD:-admin}
+      GF_USERS_ALLOW_SIGN_UP: "false"
+      GF_ANALYTICS_REPORTING_ENABLED: "false"
+      GF_ANALYTICS_CHECK_FOR_UPDATES: "false"
+    volumes:
+      - ./infra/grafana/provisioning:/etc/grafana/provisioning:ro
+      - ./infra/grafana/dashboards:/var/lib/grafana/dashboards:ro
+      - grafana-data:/var/lib/grafana
+    ports: ["127.0.0.1:${GRAFANA_PORT:-3001}:3000"]
+    depends_on: [prometheus]
+    restart: unless-stopped
+
+  jaeger:
+    image: jaegertracing/jaeger:2.9.0
+    profiles: [observability]
+    # OTLP alıcıları: 4317 (gRPC), 4318 (HTTP) — yalnız iç ağ. Arayüz yalnız yerel.
+    expose: ["4317", "4318"]
+    ports: ["127.0.0.1:${JAEGER_UI_PORT:-16686}:16686"]
+    restart: unless-stopped
+
+  # ------------------------------------------------------------ yük testi (--profile loadtest)
+  k6:
+    image: grafana/k6:1.2.3
+    profiles: [loadtest]
+    volumes:
+      - ./infra/k6:/scripts
+    working_dir: /scripts
+    environment:
+      TARGET: ${K6_TARGET:-gateway}         # gateway: nginx:8081 → api×N | web: nginx:80 → Next.js → api
+      PATIENTS: ${K6_PATIENTS:-50}
+      CLINICIANS: ${K6_CLINICIANS:-5}
+      DURATION: ${K6_DURATION:-2m}
+      PEAK_VUS: ${K6_PEAK_VUS:-50}
+      LABEL: ${K6_LABEL:-run}
+      THINK: ${K6_THINK:-1}                 # düşünme süresi çarpanı (0.1 = 10 kat yoğun)
+    command: ["run", "/scripts/sabah-yogunlugu.js"]
+    depends_on:
+      nginx:
+        condition: service_healthy
 
 volumes:
   pgdata:
+  prometheus-data:
+  grafana-data:

@@ -1,16 +1,28 @@
 "use client";
 
 import { useState } from "react";
-import { Plus, X } from "lucide-react";
+import { BadgeCheck, Plus, TriangleAlert, X } from "lucide-react";
 import { Button } from "@/components/ui/button";
 import { Input } from "@/components/ui/input";
 import { Label } from "@/components/ui/label";
 import { Textarea } from "@/components/ui/textarea";
-import type { Medication, MedicationIn } from "@/lib/types";
+import type { Medication, MedicationCatalogFields, MedicationIn } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { DrugCombobox, type DrugChoice } from "./drug-combobox";
 import { WEEKDAYS, hhmm } from "./utils";
 
 const ALL_DAYS = "1234567";
+
+/** İlaç adının katalogla ilişkisi: listeden seçildi / bilerek listede olmayan ilaç / henüz seçim yok. */
+type CatalogLink =
+  | { kind: "catalog"; id: number; pharmClass: string | null }
+  | { kind: "unlisted" }
+  | { kind: "none" };
+
+function initialLink(med?: Medication & MedicationCatalogFields): CatalogLink {
+  if (!med) return { kind: "none" };
+  return med.catalog_id ? { kind: "catalog", id: med.catalog_id, pharmClass: null } : { kind: "unlisted" };
+}
 
 function initialDays(med?: Medication): string {
   if (!med || med.schedules.length === 0) return ALL_DAYS;
@@ -25,10 +37,10 @@ export function MedicationForm({
   onSubmit,
   onCancel,
 }: {
-  medication?: Medication;
+  medication?: Medication & MedicationCatalogFields;
   saving: boolean;
   error: string | null;
-  onSubmit: (data: MedicationIn) => void;
+  onSubmit: (data: MedicationIn & MedicationCatalogFields) => void;
   onCancel: () => void;
 }) {
   const idp = medication ? `med-${medication.id}` : "med-new";
@@ -42,10 +54,28 @@ export function MedicationForm({
   });
   const [days, setDays] = useState(() => initialDays(medication));
   const [localError, setLocalError] = useState<string | null>(null);
+  const [link, setLink] = useState<CatalogLink>(() => initialLink(medication));
   const mixedDays = medication ? new Set(medication.schedules.map((s) => s.days_of_week)).size > 1 : false;
 
   function toggleDay(d: string) {
     setDays((cur) => (cur.includes(d) ? cur.replace(d, "") : [...cur, d].sort().join("")));
+  }
+
+  function typeName(text: string) {
+    setName(text);
+    if (link.kind === "catalog") setIngredient(""); // katalog bağı koptu: etken madde artık bilinmiyor
+    if (link.kind !== "none") setLink({ kind: "none" });
+  }
+
+  function chooseDrug(choice: DrugChoice, label: string) {
+    setLocalError(null);
+    if (choice.kind === "catalog") {
+      setName(label);
+      setIngredient(choice.item.generic_name);
+      setLink({ kind: "catalog", id: choice.item.id, pharmClass: choice.item.pharm_class });
+    } else {
+      setLink({ kind: "unlisted" });
+    }
   }
 
   function submit(e: React.FormEvent) {
@@ -55,7 +85,10 @@ export function MedicationForm({
     if (!name.trim()) return setLocalError("İlaç adı gerekli.");
     if (cleanTimes.length === 0) return setLocalError("En az bir saat ekleyin.");
     if (!days) return setLocalError("En az bir gün seçin.");
+    if (link.kind === "none")
+      return setLocalError("İlacı listeden seçin ya da “Listede yok, yine de ekle” seçeneğini kullanın.");
     onSubmit({
+      catalog_id: link.kind === "catalog" ? link.id : null,
       name: name.trim(),
       dose_text: doseText.trim() || null,
       active_ingredient: ingredient.trim() || null,
@@ -69,7 +102,13 @@ export function MedicationForm({
       <div className="grid gap-3 sm:grid-cols-2">
         <div className="space-y-1.5">
           <Label htmlFor={`${idp}-name`}>İlaç adı *</Label>
-          <Input id={`${idp}-name`} className="h-10" value={name} maxLength={120} onChange={(e) => setName(e.target.value)} placeholder="ör. Glifor" required />
+          <DrugCombobox id={`${idp}-name`} value={name} onType={typeName} onChoose={chooseDrug} />
+          {link.kind === "catalog" && (
+            <p className="flex items-center gap-1 text-xs text-teal-800">
+              <BadgeCheck className="size-3.5" aria-hidden /> Katalogdan seçildi
+              {link.pharmClass && <span className="text-muted-foreground">· {link.pharmClass}</span>}
+            </p>
+          )}
         </div>
         <div className="space-y-1.5">
           <Label htmlFor={`${idp}-dose`}>Doz (hekiminizin yazdığı)</Label>
@@ -77,7 +116,27 @@ export function MedicationForm({
         </div>
         <div className="space-y-1.5 sm:col-span-2">
           <Label htmlFor={`${idp}-ing`}>Etken madde</Label>
-          <Input id={`${idp}-ing`} className="h-10" value={ingredient} onChange={(e) => setIngredient(e.target.value)} placeholder="ör. metformin" />
+          <Input
+            id={`${idp}-ing`}
+            className={cn("h-10", link.kind === "catalog" && "bg-muted")}
+            value={ingredient}
+            readOnly={link.kind === "catalog"}
+            aria-describedby={`${idp}-ing-hint`}
+            onChange={(e) => setIngredient(e.target.value)}
+            placeholder={link.kind === "catalog" ? "" : "ör. metformin"}
+          />
+          <p id={`${idp}-ing-hint`} className="text-xs text-muted-foreground">
+            {link.kind === "catalog"
+              ? "Katalogdan otomatik dolduruldu; değiştirmek için ilacı yeniden seçin."
+              : "İlacı listeden seçtiğinizde otomatik dolar."}
+          </p>
+          {link.kind === "unlisted" && (
+            <p className="flex items-start gap-1.5 rounded-md border border-amber-200 bg-amber-50 px-2.5 py-1.5 text-xs text-amber-900">
+              <TriangleAlert className="mt-0.5 size-3.5 shrink-0" aria-hidden />
+              Doğrulanmamış ilaç — bilgi kartı gösterilemez. Hekiminiz bu ilacı listede “doğrulanmamış” olarak görür;
+              adı ilaç kutusundaki gibi yazdığınızdan emin olun.
+            </p>
+          )}
         </div>
       </div>
 

@@ -8,7 +8,7 @@ export async function POST(req: Request) {
   const ip = clientIpFrom(req);
   if (ip) headers["X-Forwarded-For"] = ip;
 
-  const res = await fetch(`${API_URL}/auth/login`, {
+  const res = await fetch(`${API_URL}/v1/auth/login`, {
     method: "POST",
     headers,
     body: new URLSearchParams({ username: email ?? "", password: password ?? "" }),

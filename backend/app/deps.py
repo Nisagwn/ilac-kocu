@@ -22,7 +22,7 @@ from app.db import get_db
 from app.models import AccessLog, Patient, PatientCaregiver, Role, User
 from app.security import decode_token, is_jti_denied
 
-oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/auth/login")
+oauth2_scheme = OAuth2PasswordBearer(tokenUrl="/v1/auth/login")
 
 DB = Annotated[Session, Depends(get_db)]
 

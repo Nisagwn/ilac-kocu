@@ -7,10 +7,11 @@ import { Card, CardAction, CardContent, CardDescription, CardHeader, CardTitle }
 import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@/components/ui/table";
 import { Tabs, TabsContent, TabsList, TabsTrigger } from "@/components/ui/tabs";
 import { api } from "@/lib/api";
-import type { Adherence, Alert, DoseLog, Measurement, Medication, Patient, WeeklySummary } from "@/lib/types";
+import type { Adherence, Alert, DoseLog, Measurement, Medication, MedicationCatalogFields, Patient, WeeklySummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
 import { AlertItem } from "./alert-item";
 import { AdherenceBadge, ReadOnlyBadge } from "./badges";
+import { ClinicalSummaryCard } from "./clinical-summary-card";
 import { DoseCalendar } from "./dose-calendar";
 import {
   BAND_LABEL,
@@ -88,6 +89,7 @@ export function PatientDetail({ patientId, readOnly }: PatientDetailProps) {
         <>
           <PatientHeader patient={data.patient} readOnly={readOnly} />
           <ClinicalTrends measurements={data.measurements} />
+          <ClinicalSummaryCard patientId={patientId} />
           <div className="grid gap-4 lg:grid-cols-5">
             <AdherenceCard
               className="lg:col-span-3"
@@ -302,6 +304,15 @@ function AdherenceCard({
                       <span className="font-medium">{med?.name ?? `İlaç #${id}`}</span>
                       {med?.dose_text && <span className="ml-1 text-xs text-muted-foreground">{med.dose_text}</span>}
                       {!med && <span className="ml-1 text-xs text-muted-foreground">(pasif)</span>}
+                      {med && (med as Medication & MedicationCatalogFields).verified === false && (
+                        <Badge
+                          variant="outline"
+                          className="ml-1.5 border-amber-200 bg-amber-50 text-amber-800"
+                          title="Hasta bu ilacı katalogdan seçmeden serbest metinle ekledi; etken madde doğrulanmadı."
+                        >
+                          Doğrulanmamış
+                        </Badge>
+                      )}
                     </TableCell>
                     <TableCell className="text-xs text-muted-foreground tabular-nums">
                       {med?.schedules.map((s) => s.time_of_day.slice(0, 5)).join(", ") || "—"}

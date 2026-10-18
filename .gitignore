@@ -7,3 +7,8 @@ __pycache__/
 *.db
 node_modules/
 .next/
+
+# Altyapı: yük testi sonuçları ve yerel TLS sertifikaları
+infra/k6/results/*
+!infra/k6/results/.gitkeep
+infra/nginx/certs/

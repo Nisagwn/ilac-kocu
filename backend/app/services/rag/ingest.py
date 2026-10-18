@@ -84,9 +84,12 @@ def ingest_label_data(db: Session, data: dict) -> EducationContent | None:
 
     row = db.scalar(select(EducationContent).where(EducationContent.drug_key == drug_key))
     if row is None:
-        row = EducationContent(drug_key=drug_key, kind="openfda", reviewed=False)
+        row = EducationContent(drug_key=drug_key, kind="openfda", reviewed=False, review_status="pending")
         db.add(row)
     changed = (row.title, row.body, row.tags) != (title, body, tags)
+    if changed and row.id is not None and row.review_status != "pending":
+        # Etiket metni değişti: önceki hekim kararı yeni metni kapsamaz, yeniden onay beklenir
+        row.reviewed, row.review_status, row.reviewed_by, row.reviewed_at = False, "pending", None, None
     row.title, row.body, row.tags = title, body, tags
     row.source_name, row.source_url = SOURCE_NAME, source_url_for(data)
     if changed or row.embedding_model is None:

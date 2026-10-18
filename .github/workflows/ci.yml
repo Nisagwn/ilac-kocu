@@ -33,13 +33,25 @@ jobs:
       - run: pip install -r requirements-dev.txt
 
       - name: Lint
-        run: ruff check app tests
+        run: ruff check app tests scripts
 
-      - name: Guardrail red-team seti (40 senaryo)
+      # Senaryo sayısı tests/guardrail_scenarios.yaml'dan gelir (sabit yazılmaz)
+      - name: Guardrail red-team seti
         run: pytest tests/test_guardrails.py -v
 
+      - name: Koç kalite değerlendirme seti (kural tabanlı koç + araç çıktıları)
+        run: pytest tests/test_coach_eval.py -v
+
+      # Yukarıdaki iki set burada tekrar koşmaz; postgres testleri aşağıda gerçek veritabanında koşar
       - name: Birim ve API testleri
-        run: pytest -q
+        run: >-
+          pytest -q -m "not postgres"
+          --ignore=tests/test_guardrails.py --ignore=tests/test_coach_eval.py
+
+      - name: PostgreSQL + pgvector testleri (RAG araması, lider kilidi)
+        env:
+          DATABASE_URL: postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu
+        run: pytest -v -m postgres tests/test_postgres.py
 
       - name: Migration (PostgreSQL) — upgrade / downgrade / upgrade
         env:
