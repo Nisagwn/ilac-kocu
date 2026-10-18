@@ -22,6 +22,7 @@ import type {
   User,
   WeeklySummary,
 } from "./types";
+import type { ClinicalInsights, EducationContent, ReviewStatus } from "./types";
 
 export class ApiError extends Error {
   constructor(
@@ -97,4 +98,15 @@ export const api = {
   chatHistory: (limit = 50) => request<CoachMessage[]>(`/coach/history?limit=${limit}`),
 
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),
+};
+
+// --- Klinik içgörüler ve eğitim içeriği onayı ------------------------------------------------
+export const insightsApi = {
+  insights: (id: number) => request<ClinicalInsights>(`/patients/${id}/insights`),
+  education: (status?: ReviewStatus) =>
+    request<EducationContent[]>(`/education${status ? `?review_status=${status}` : ""}`),
+  approveEducation: (contentId: number) =>
+    request<EducationContent>(`/education/${contentId}/review`, { method: "POST" }),
+  rejectEducation: (contentId: number) =>
+    request<EducationContent>(`/education/${contentId}/reject`, { method: "POST" }),
 };

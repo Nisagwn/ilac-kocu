@@ -8,6 +8,7 @@ import { Table, TableBody, TableCell, TableHead, TableHeader, TableRow } from "@
 import { api } from "@/lib/api";
 import type { PatientSummary } from "@/lib/types";
 import { cn } from "@/lib/utils";
+import { AdherenceTrendIndicator } from "./adherence-trend";
 import { AdherenceBadge } from "./badges";
 import { bandOf, pct, relativeTime } from "./format";
 import { EmptyState, ErrorState, Skeleton } from "./states";
@@ -130,7 +131,9 @@ export function ClinicianPatientList() {
                 <TableHeader>
                   <TableRow className="bg-muted/40 hover:bg-muted/40">
                     <TableHead className="pl-4">Hasta</TableHead>
-                    <TableHead>7 gün uyum</TableHead>
+                    <TableHead>
+                      7 gün uyum <span className="font-normal text-muted-foreground">(haftalık fark)</span>
+                    </TableHead>
                     <TableHead>30 gün uyum</TableHead>
                     <TableHead>Açık uyarı</TableHead>
                     <TableHead>Son ölçüm</TableHead>
@@ -158,7 +161,13 @@ export function ClinicianPatientList() {
                           </Link>
                         </TableCell>
                         <TableCell>
-                          <AdherenceBadge score={p.adherence_7d} band={p.band} />
+                          <span className="inline-flex items-center gap-2">
+                            <AdherenceBadge score={p.adherence_7d} band={p.band} />
+                            <AdherenceTrendIndicator
+                              delta={p.adherence_trend_delta}
+                              direction={p.adherence_trend_direction}
+                            />
+                          </span>
                         </TableCell>
                         <TableCell>
                           <AdherenceBadge score={p.adherence_30d} band={bandOf(p.adherence_30d)} />

@@ -11,6 +11,7 @@ import type { Adherence, Alert, DoseLog, Measurement, Medication, Patient, Weekl
 import { cn } from "@/lib/utils";
 import { AlertItem } from "./alert-item";
 import { AdherenceBadge, ReadOnlyBadge } from "./badges";
+import { ClinicalSummaryCard } from "./clinical-summary-card";
 import { DoseCalendar } from "./dose-calendar";
 import {
   BAND_LABEL,
@@ -88,6 +89,7 @@ export function PatientDetail({ patientId, readOnly }: PatientDetailProps) {
         <>
           <PatientHeader patient={data.patient} readOnly={readOnly} />
           <ClinicalTrends measurements={data.measurements} />
+          <ClinicalSummaryCard patientId={patientId} />
           <div className="grid gap-4 lg:grid-cols-5">
             <AdherenceCard
               className="lg:col-span-3"
