@@ -58,6 +58,11 @@ class LeaderLock:
         """Lider hâlâ kilidi tutuyor mu? Bağlantı koptuysa liderlik bırakılır."""
         if self._noop or not self._held:
             return self._held
+        if self._conn is None or self._conn.invalidated or self._conn.closed:
+            # Bağlantı yeniden kurulsa bile kilit yeni oturumda yoktur: liderlik bitti
+            logger.warning("Lider bağlantısı geçersiz; liderlik bırakıldı")
+            self._drop(invalidate=True)
+            return False
         try:
             self._conn.execute(text("SELECT 1")).scalar()
             self._conn.commit()
