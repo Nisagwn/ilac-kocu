@@ -68,7 +68,7 @@ export function refreshTokens(refreshToken: string): Promise<TokenPair | null> {
   for (const [k, v] of inflight) if (now - v.at > REUSE_MS) inflight.delete(k);
   const hit = inflight.get(refreshToken);
   if (hit) return hit.promise;
-  const promise = fetch(`${API_URL}/auth/refresh`, {
+  const promise = fetch(`${API_URL}/v1/auth/refresh`, {
     method: "POST",
     headers: { "Content-Type": "application/json" },
     body: JSON.stringify({ refresh_token: refreshToken }),

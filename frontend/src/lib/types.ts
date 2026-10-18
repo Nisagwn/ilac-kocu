@@ -182,3 +182,6 @@ export interface WeeklySummary {
 export interface DrugLabel {
   [key: string]: unknown;
 }
+
+// Cursor sayfalı yeni /v1 uçlarının yanıtı (ör. /v1/measurements, /v1/doses)
+export type Page<T> = { items: T[]; next_cursor: string | null };

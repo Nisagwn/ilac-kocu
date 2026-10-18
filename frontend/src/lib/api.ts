@@ -38,8 +38,11 @@ function detailToMessage(detail: unknown): string {
   return "Beklenmeyen bir hata oluştu";
 }
 
+// Backend sürümü: tüm çağrılar /v1 altındaki uçlara gider (sürümsüz yollar kullanımdan kalkıyor).
+export const API_VERSION = "/v1";
+
 export async function request<T>(path: string, init: RequestInit = {}): Promise<T> {
-  const res = await fetch(`/api/proxy${path}`, {
+  const res = await fetch(`/api/proxy${API_VERSION}${path}`, {
     ...init,
     headers: { "Content-Type": "application/json", ...init.headers },
   });
@@ -76,13 +79,13 @@ export const api = {
   todayDoses: (id: number, day?: string) =>
     request<TodayDose[]>(`/patients/${id}/doses/today${day ? `?day=${day}` : ""}`),
   logDose: (id: number, data: { schedule_id: number; scheduled_date: string; status: DoseStatus; reason?: string }) =>
-    request<DoseLog>(`/patients/${id}/doses`, { method: "PUT", body: json(data) }),
+    requestIdempotent<DoseLog>(`/patients/${id}/doses`, { method: "PUT", body: json(data) }),
   doses: (id: number, days = 30) => request<DoseLog[]>(`/patients/${id}/doses?days=${days}`),
 
   measurements: (id: number, days = 30, type?: MeasurementType) =>
     request<Measurement[]>(`/patients/${id}/measurements?days=${days}${type ? `&type=${type}` : ""}`),
   createMeasurement: (id: number, data: MeasurementIn) =>
-    request<MeasurementCreated>(`/patients/${id}/measurements`, { method: "POST", body: json(data) }),
+    requestIdempotent<MeasurementCreated>(`/patients/${id}/measurements`, { method: "POST", body: json(data) }),
   deleteMeasurement: (id: number, mId: number) =>
     request<void>(`/patients/${id}/measurements/${mId}`, { method: "DELETE" }),
 
@@ -91,10 +94,47 @@ export const api = {
   openAlerts: () => request<Alert[]>("/alerts"),
   ackAlert: (alertId: number) => request<Alert>(`/alerts/${alertId}/ack`, { method: "POST" }),
 
-  chat: (message: string) => request<CoachReply>("/coach/chat", { method: "POST", body: json({ message }) }),
-  createCoachJob: (message: string) => request<CoachJob>("/coach/jobs", { method: "POST", body: json({ message }) }),
+  chat: (message: string) =>
+    requestIdempotent<CoachReply>("/coach/chat", { method: "POST", body: json({ message }) }),
+  createCoachJob: (message: string) =>
+    requestIdempotent<CoachJob>("/coach/jobs", { method: "POST", body: json({ message }) }),
   coachJob: (jobId: string) => request<CoachJob>(`/coach/jobs/${encodeURIComponent(jobId)}`),
   chatHistory: (limit = 50) => request<CoachMessage[]>(`/coach/history?limit=${limit}`),
 
   drugLabel: (name: string) => request<DrugLabel>(`/drugs/label?name=${encodeURIComponent(name)}`),
 };
+
+// --- Idempotency-Key ile güvenli yeniden deneme ---
+// Doz kaydı, ölçüm ekleme ve koç mesajı için her mantıksal işlemde bir anahtar üretilir; ağ hatası, 409
+// (aynı anahtarlı istek hâlâ işleniyor) ya da 5xx'te AYNI anahtarla yeniden denenir. Backend aynı anahtar +
+// aynı gövde için kayıtlı yanıtı döndürür (Idempotent-Replayed: true), böylece kayıt iki kez oluşmaz.
+
+function newIdempotencyKey(): string {
+  if (typeof crypto.randomUUID === "function") return crypto.randomUUID();
+  // Güvenli olmayan bağlamda (localhost dışı http) randomUUID yoktur
+  const bytes = new Uint8Array(16);
+  crypto.getRandomValues(bytes);
+  return Array.from(bytes, (b) => b.toString(16).padStart(2, "0")).join("");
+}
+
+const IDEMPOTENT_RETRIES = 2;
+
+function isRetryable(err: unknown): boolean {
+  if (err instanceof ApiError) return err.status === 409 || err.status >= 500;
+  return err instanceof TypeError; // fetch ağ hatası
+}
+
+export async function requestIdempotent<T>(
+  path: string,
+  init: RequestInit = {},
+  key: string = newIdempotencyKey(),
+): Promise<T> {
+  for (let attempt = 0; ; attempt++) {
+    try {
+      return await request<T>(path, { ...init, headers: { ...init.headers, "Idempotency-Key": key } });
+    } catch (err) {
+      if (attempt >= IDEMPOTENT_RETRIES || !isRetryable(err)) throw err;
+      await new Promise((resolve) => setTimeout(resolve, 400 * 2 ** attempt));
+    }
+  }
+}
