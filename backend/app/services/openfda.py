@@ -18,6 +18,7 @@ from app.services import drug_catalog
 
 MAX_FIELD_CHARS = 1200
 CACHE_TTL_SECONDS = 24 * 3600
+STALE_TTL_SECONDS = 30 * 24 * 3600  # openFDA kullanılamazken dönülecek son etiketin saklanma süresi
 
 log = logging.getLogger(__name__)
 
@@ -100,6 +101,7 @@ class LabelCache:
     Redis'e ulaşılamazsa sessizce süreç içi önbelleğe düşer; önbellek hatası isteği asla bozmaz."""
 
     PREFIX = "openfda:label:"
+    LAST = "last:"  # son bilinen etiket (devre açıkken yedek), STALE_TTL_SECONDS
 
     def __init__(self) -> None:
         self._memory: dict[str, dict] = {}
@@ -118,11 +120,25 @@ class LabelCache:
                 log.warning("Redis okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
         return self._memory.get(key)
 
+    def get_stale(self, key: str) -> dict | None:
+        """Son bilinen etiket (TTL'i dolmuş olabilir): openFDA kullanılamazken yedek."""
+        r = self._client()
+        if r is not None:
+            try:
+                raw = r.get(self.PREFIX + self.LAST + key)
+                if raw:
+                    return json.loads(raw)
+            except Exception:
+                log.warning("Redis okunamadı; süreç içi önbellek kullanılıyor", exc_info=True)
+        return self._memory.get(key)
+
     def set(self, key: str, value: dict) -> None:
         r = self._client()
         if r is not None:
             try:
-                r.setex(self.PREFIX + key, CACHE_TTL_SECONDS, json.dumps(value, ensure_ascii=False))
+                raw = json.dumps(value, ensure_ascii=False)
+                r.setex(self.PREFIX + key, CACHE_TTL_SECONDS, raw)
+                r.setex(self.PREFIX + self.LAST + key, STALE_TTL_SECONDS, raw)
                 return
             except Exception:
                 log.warning("Redis'e yazılamadı; süreç içi önbellek kullanılıyor", exc_info=True)
@@ -145,12 +161,31 @@ class LabelCache:
 label_cache = LabelCache()
 
 
+OPENFDA_BREAKER = "openfda"
+
+
 def get_label_cached(name: str) -> dict:
-    """Önbellekli fetch_label. DrugLabelNotFound / OpenFDAUnavailable yukarı fırlatılır."""
+    """Önbellekli fetch_label. DrugLabelNotFound / OpenFDAUnavailable yukarı fırlatılır.
+
+    Devre kesici (app/services/circuit_breaker.py): openFDA art arda ulaşılamazsa devre açılır ve istek
+    atılmadan önbellekteki son etiket (TTL'i geçmiş olsa da, en fazla STALE_TTL_SECONDS) döner; o da yoksa
+    OpenFDAUnavailable. "Bulunamadı" (404) hata sayılmaz."""
+    from app.services.circuit_breaker import CircuitOpenError, get_breaker
+
     key = resolve_generic(name)
     cached = label_cache.get(key) if key else None
     if cached is not None:
         return cached
-    data = fetch_label(name)  # modül düzeyinde çözülür: testler monkeypatch edebilir
+    try:
+        with get_breaker(OPENFDA_BREAKER).guard(ignore=(DrugLabelNotFound,)):
+            data = fetch_label(name)  # modül düzeyinde çözülür: testler monkeypatch edebilir
+    except (CircuitOpenError, OpenFDAUnavailable) as exc:
+        stale = label_cache.get_stale(key) if key else None
+        if stale is not None:
+            log.info("openFDA kullanılamıyor (%s); önbellekteki son etiket döndü", type(exc).__name__)
+            return stale
+        if isinstance(exc, CircuitOpenError):
+            raise OpenFDAUnavailable("openFDA şu an kullanılamıyor (devre açık)") from exc
+        raise
     label_cache.set(key, data)
     return data

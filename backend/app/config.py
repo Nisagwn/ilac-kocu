@@ -65,7 +65,10 @@ class Settings(BaseSettings):
 
     # --- Asenkron koç işleri (POST /coach/jobs, app/worker.py) ---
     coach_job_stale_minutes: int = 10  # bu süreden uzun "running" kalan işler işçi açılışında kurtarılır
-    coach_job_max_attempts: int = 2  # bu kadar denemeden sonra iş kural tabanlı yanıtla kapatılır
+    # En fazla bu kadar deneme (üstel bekleme: base, 2*base, ...); sonra iş DLQ'ya (Redis "coach:jobs:dlq")
+    # alınır, durumu "failed" olur ve hastaya güvenli yedek yanıt yazılır
+    coach_job_max_attempts: int = 3
+    coach_job_backoff_seconds: float = 2.0
 
     # --- Dayanıklılık: devre kesici (app/services/circuit_breaker.py) ---
     circuit_breaker_enabled: bool = True

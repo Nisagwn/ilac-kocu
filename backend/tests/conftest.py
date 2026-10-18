@@ -10,6 +10,7 @@ os.environ["COACH_PROVIDER"] = "rule"
 os.environ["REDIS_URL"] = ""  # testler Redis olmadan (süreç içi yedeklerle) koşar
 # Kullanıcı başına genel istek sınırı testlerde kapalı; tests/test_platform.py kendi içinde açar
 os.environ["RATE_LIMIT_ENABLED"] = "false"
+os.environ.setdefault("COACH_JOB_BACKOFF_SECONDS", "0")  # yeniden denemeler testlerde beklemez
 
 import pytest
 from fastapi.testclient import TestClient

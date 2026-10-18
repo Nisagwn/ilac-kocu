@@ -15,3 +15,4 @@ ignore = ["B008", "E501", "UP042"]  # Depends() kalıbı; satır uzunluğunu for
 [tool.pytest.ini_options]
 testpaths = ["tests"]
 filterwarnings = ["ignore::DeprecationWarning"]
+markers = ["postgres: gerçek PostgreSQL + pgvector gerektirir (DATABASE_URL postgresql ise koşar)"]
