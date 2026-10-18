@@ -1,0 +1,30 @@
+# Prometheus — docker compose --profile observability
+# API kopyaları Docker'ın gömülü DNS'i ile keşfedilir: "api" adı her kopyanın IP'sini ayrı A kaydı olarak
+# döndürür, böylece --scale ile eklenen/çıkan kopyalar yeniden yüklemeden hedef listesine girer/çıkar.
+# Not: .env'de METRICS_TOKEN tanımlıysa api işinde `authorization: { credentials: <token> }` ekleyin.
+global:
+  scrape_interval: 10s
+  evaluation_interval: 10s
+
+scrape_configs:
+  - job_name: api
+    metrics_path: /metrics
+    dns_sd_configs:
+      - names: [api]
+        type: A
+        port: 8000
+        refresh_interval: 10s
+    relabel_configs:
+      # instance etiketi IP:port olarak kalır (kopya başına bir seri); hasta/kullanıcı kimliği etiketi yok
+      - target_label: service
+        replacement: api
+
+  - job_name: worker
+    static_configs:
+      - targets: ["worker:9101"]
+        labels:
+          service: worker
+
+  - job_name: prometheus
+    static_configs:
+      - targets: ["localhost:9090"]
