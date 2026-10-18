@@ -5,7 +5,6 @@ kuyruk yolu bellek içi sahte Redis ile sınanır.
 """
 
 import threading
-from collections import deque
 from datetime import timedelta
 
 from fastapi.testclient import TestClient
@@ -15,27 +14,8 @@ from app.redis_client import reset_redis
 from app.services import jobs
 from app.services.coach import CoachReply
 from tests.conftest import TestingSession, register
+from tests.fake_redis import FakeRedis
 from tests.test_api import add_med
-
-
-class FakeRedis:
-    """Yalnızca lpush/brpop: LPUSH sola ekler, BRPOP sağdan alır (FIFO)."""
-
-    def __init__(self):
-        self.lists: dict[str, deque] = {}
-
-    def lpush(self, key, *values):
-        q = self.lists.setdefault(key, deque())
-        for v in values:
-            q.appendleft(v)
-        return len(q)
-
-    def brpop(self, keys, timeout=0):
-        for key in keys:
-            q = self.lists.get(key)
-            if q:
-                return key, q.pop()
-        return None
 
 
 class ExplodingProvider:
@@ -146,8 +126,11 @@ def test_process_job_unexpected_stage_error_still_answers(client, db, patient, m
         return real(*args, **kwargs)
 
     monkeypatch.setattr(jobs, "run_provider_stage", flaky)
-    job = jobs.process_job(db, job_id)
-    assert job.status == jobs.DONE and job.reply["guardrail_action"] == "llm_fallback"
+    slept = []
+    job = jobs.process_job(db, job_id, sleep=slept.append)
+    # Redis yok: süreç içinde üstel beklemeyle yeniden denendi, ikinci deneme asıl yanıtı üretti
+    assert job.status == jobs.DONE and job.reply["guardrail_action"] is None
+    assert job.attempts == 2 and calls["n"] == 2 and len(slept) == 1
 
 
 def test_process_job_is_idempotent(client, db, patient):
@@ -182,13 +165,14 @@ def test_stale_running_job_is_requeued_then_closed(client, db, patient):
     assert db.get(CoachJob, job_id, populate_existing=True).status == jobs.QUEUED
     assert jobs.dequeue_job(fake) == job_id
 
-    # Deneme hakkı bitmişse kural tabanlı yanıtla kapatılır (kullanıcı askıda kalmaz)
+    # Deneme hakkı bitmişse DLQ'ya alınır; hasta yine de kural tabanlı yedek yanıt alır (askıda kalmaz)
     job = db.get(CoachJob, job_id)
-    job.status, job.started_at, job.attempts = jobs.RUNNING, utcnow() - timedelta(minutes=30), 2
+    job.status, job.started_at, job.attempts = jobs.RUNNING, utcnow() - timedelta(minutes=30), 3
     db.commit()
     jobs.recover_stale_jobs(db, fake)
     job = db.get(CoachJob, job_id, populate_existing=True)
-    assert job.status == jobs.DONE and job.reply["guardrail_action"] == "llm_fallback"
+    assert job.status == jobs.FAILED and job.reply["guardrail_action"] == "llm_fallback"
+    assert [e["job_id"] for e in jobs.dlq_entries(fake)] == [job_id]
 
 
 # ---------------- Kuyruk yolu (sahte Redis) ----------------
