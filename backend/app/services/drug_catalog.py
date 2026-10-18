@@ -49,7 +49,7 @@ _SALT_WORDS = {
     "sodium", "calcium", "magnesium", "tartrate", "succinate", "fumarate", "hemifumarate", "medoxomil",
     "cilexetil", "erbumine", "arginine", "tosylate", "bisulfate", "hydrobromide", "monohydrate", "dihydrate",
     "hemihydrate", "trihydrate", "anhydrous", "propanediol", "phosphate", "acetate", "citrate", "mesilate",
-    "etexilate", "lysine",
+    "etexilate", "lysine", "benzoate",
 }
 # Form / salım şekli ifadeleri (etken madde değildir)
 _FORM_PHRASES = [
