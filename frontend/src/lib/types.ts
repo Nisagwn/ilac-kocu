@@ -275,3 +275,6 @@ export interface MedicationCatalogFields {
   catalog_id?: number | null;
   verified?: boolean;
 }
+
+// Cursor sayfalı yeni /v1 uçlarının yanıtı (ör. /v1/measurements, /v1/doses)
+export type Page<T> = { items: T[]; next_cursor: string | null };
