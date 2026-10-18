@@ -1,0 +1,9 @@
+# TLS katmanı (isteğe bağlı): docker compose -f docker-compose.yml -f infra/nginx/compose.tls.yml up -d
+# Önce sertifika: sh infra/nginx/gen-cert.sh   (yollar proje kök dizinine göredir)
+services:
+  nginx:
+    ports:
+      - "${HTTPS_PORT:-443}:443"
+    volumes:
+      - ./infra/nginx/tls.conf:/etc/nginx/conf.d/tls.conf:ro
+      - ./infra/nginx/certs:/etc/nginx/certs:ro
