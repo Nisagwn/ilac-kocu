@@ -433,6 +433,7 @@ Sağlık verisi KVKK kapsamında özel nitelikli kişisel veridir; yaklaşım "p
 | Cihaz | Service worker `/api/*` yanıtlarını ve kişiye özel sayfaları **önbelleğe almaz** |
 | Erişim kaydı | Hekim/yakının her hasta verisi okuması `access_logs`'a yazılır (sağlık değeri olmadan); hasta kendi erişim geçmişini görür |
 | Kötüye kullanım | Giriş, kayıt ve koç uç noktalarında istek sınırı (Redis); 15 dk erişim + döndürmeli yenileme token'ı, çıkışta iptal |
+| XSS / CSP | İstek başına nonce'lu CSP (`frontend/src/middleware.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, satır içi betik yasak; `object-src 'none'`, `frame-ancestors 'none'`. Diğer güvenlik başlıkları (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, TLS'te HSTS) nginx'te |
 | Diğer | bcrypt şifre hash'i, güvenlik başlıkları, sırlar yalnızca `.env`'de, guardrail olayları içerik olmadan loglanır, yalnızca sentetik veri |
 
 Etik değerlendirme ve zarar senaryoları: [final rapor §11](docs/M5/final-rapor.md#11-etik-ve-güvenlik-değerlendirmesi) · Ölçüt → kanıt eşlemesi: [`etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md)

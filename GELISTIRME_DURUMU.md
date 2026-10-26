@@ -77,8 +77,8 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [ ] Gerçek openFDA yanıtından test fikstürü; haftalık/elle tetiklenen openFDA erişim iş akışı
 
 ### G — Nonce tabanlı CSP
-- [ ] `middleware.ts` istek başına nonce + `script-src 'nonce-…' 'strict-dynamic'`; CSP Nginx'ten Next.js'e taşınır
-- [ ] Diğer güvenlik başlıkları Nginx'te kalır; tarayıcıda CSP ihlali yok
+- [x] `middleware.ts` istek başına nonce + `script-src 'nonce-…' 'strict-dynamic'`; CSP Nginx'ten Next.js'e taşınır
+- [x] Diğer güvenlik başlıkları Nginx'te kalır; tarayıcıda CSP ihlali yok (headless Chrome, `/giris`; nginx imajıyla uçtan uca denenmedi)
 
 ### H — Yük testi düzeltmeleri
 - [ ] API kopyalarına CPU sınırı (`cpus`)

@@ -48,16 +48,20 @@ Doğrulandı: `X-Forwarded-For: 6.6.6.6` ile yapılan girişte Redis'teki giriş
 `login:ip:172.26.0.1` (gerçek bağlantı adresi) oldu, taklit edilen değer değil.
 
 ### Güvenlik başlıkları (`infra/nginx/snippets/security-headers.conf`)
-`Content-Security-Policy` (aşağıda), `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
+nginx'te: `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`,
 `Referrer-Policy: strict-origin-when-cross-origin`, `Permissions-Policy`, `Cross-Origin-Opener-Policy`.
 Next.js'in aynı adlı başlıkları `proxy_hide_header` ile gizlenir (çift başlık olmaz). HSTS yalnızca TLS
 sunucusunda.
 
-CSP: `default-src 'self'; script-src 'self' 'unsafe-inline'; style-src 'self' 'unsafe-inline'; img-src 'self'
-data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self';
-frame-ancestors 'none'; base-uri 'self'; form-action 'self'; object-src 'none'`.
-`'unsafe-inline'` script için zorunlu: Next.js App Router RSC yükünü satır içi `<script>` ile aktarır; nonce
-tabanlı CSP middleware değişikliği gerektirir (sonraki adım). Dış kaynak (CDN, font) kullanılmıyor.
+**CSP nginx'te değil, Next.js'te** (`frontend/src/middleware.ts`): politika istek başına üretilen bir nonce
+içerir ve Next.js bu nonce'u kendi `<script>` etiketlerine ekler; nginx sabit bir CSP üretemez. `proxy-web.conf`
+Next.js'in `Content-Security-Policy` başlığını **gizlemez**, `security-headers.conf` CSP eklemez — çift CSP
+olsaydı tarayıcı ikisini birden uygular ve nonce'suz politika sayfayı kırardı.
+Sayfa politikası: `script-src 'self' 'nonce-<n>' 'strict-dynamic'` (`'unsafe-inline'` yok), `style-src 'self'
+'unsafe-inline'` (Recharts/öznitelik stilleri), `object-src 'none'`, `base-uri 'self'`, `form-action 'self'`,
+`frame-ancestors 'none'`, `connect-src`/`worker-src`/`manifest-src 'self'`, `img-src 'self' data: blob:`.
+Dış `/api/*` (Next route handler'ları) için `next.config.ts` `default-src 'none'; frame-ancestors 'none'` verir;
+iç ağ geçidi :8081 tarayıcıya açık olmadığından orada CSP yoktur. Ayrıntı: `docs/M3/guvenlik-ve-pwa.md` §3.1.
 
 ### Diğer nginx ayarları
 - gzip (`gzip_proxied any`, JSON/JS/CSS/SVG/manifest), `client_max_body_size 1m`, gövde/başlık zaman aşımları.

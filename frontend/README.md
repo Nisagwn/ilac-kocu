@@ -73,3 +73,4 @@ asıl yetki denetimi her istekte backend'de JWT ile yapılır (yetkisiz erişim 
 
 `next.config.ts` tüm yanıtlara `X-Content-Type-Options: nosniff`, `Referrer-Policy: strict-origin-when-cross-origin`,
 `X-Frame-Options: DENY` ve kısıtlı bir `Permissions-Policy` ekler; `/sw.js` `no-cache` ve `Service-Worker-Allowed: /` ile sunulur.
+`src/middleware.ts` her sayfa isteğinde nonce'lu CSP kurar (`script-src 'self' 'nonce-…' 'strict-dynamic'`); ayrıntı `docs/M3/guvenlik-ve-pwa.md` §3.1.

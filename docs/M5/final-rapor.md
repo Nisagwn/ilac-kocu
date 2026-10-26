@@ -258,7 +258,7 @@ Sağlık verisi KVKK m.6 kapsamında **özel nitelikli kişisel veridir**. Proje
 | **Token güvenliği** | JWT tarayıcı JavaScript'ine, `localStorage`'a veya yanıt gövdesine hiç düşmez; Next.js sunucusunda **httpOnly**, `SameSite=Lax` (üretimde `Secure`) çerezde durur. XSS ile token çalınamaz; tüm çağrılar aynı kökenli `/api/proxy` üzerinden yapılır, CORS yüzeyi kalkar. JWT ömrü 60 dakikadır. |
 | **Cihazda iz bırakmama** | Service worker `/api/*` yanıtlarını ve kişiye özel HTML'i **asla önbelleğe almaz**; yalnızca kişisel veri içermeyen kabuk (offline sayfası, ikon, manifest) ve içerik-hash'li statik dosyalar saklanır. Paylaşılan bir cihazda çevrimdışı modda sağlık verisi görüntülenemez. |
 | **Loglama** | Guardrail olayları mesaj içeriği olmadan, yalnızca eylem/kategori olarak kaydedilir. |
-| **Güvenlik başlıkları** | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, kısıtlı `Permissions-Policy`. |
+| **Güvenlik başlıkları** | `X-Frame-Options: DENY`, `X-Content-Type-Options: nosniff`, `Referrer-Policy`, kısıtlı `Permissions-Policy`; istek başına nonce'lu CSP (`script-src 'self' 'nonce-…' 'strict-dynamic'`, satır içi betik yasak). |
 | **Sırlar** | Tüm anahtarlar `.env`/ortam değişkeninde; repoda yalnızca `.env.example`. |
 | **Sentetik veri** | Demo, geliştirme ve testler yalnızca sentetik veriyle yapılır. |
 
