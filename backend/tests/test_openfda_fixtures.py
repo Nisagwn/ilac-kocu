@@ -123,3 +123,14 @@ def test_discovery_keeps_real_drugs(term, expected):
     g = dc._clean_discovered(dc.canonical_generic(term))
     assert g == expected
     assert g in dc._filter_discovered({g: "x", "dipyridamole": "x"}, {"aspirin"})
+
+
+def test_generic_combination_names_are_not_brands(db):
+    """Gerçek metformin marka sayımında "Glipizide and Metformin Hydrochloride" gibi jenerik kombinasyon adları
+    çıkıyor; bunlar marka sayılmaz. "Actoplus Met", "Invokamet" gibi gerçek markalar kalır."""
+    with httpx.Client(transport=httpx.MockTransport(_real_openfda)) as c:
+        dc.sync_from_openfda(db, client=c, sleeper=lambda s: None, sleep=0, classes=[])
+    met = db.scalar(select(DrugCatalog).where(DrugCatalog.generic_name == "metformin"))
+    us = [b for b in met.brand_names if b not in met.tr_brand_names]
+    assert not any(" and " in b.lower() for b in us), us
+    assert {"actoplus met", "invokamet"} <= {b.lower() for b in us}

@@ -25,7 +25,7 @@ from app.services.drug_catalog import CatalogSyncError, sync_from_openfda
 def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     parser = argparse.ArgumentParser(description="openFDA'dan ilaç kataloğu senkronu")
     parser.add_argument("--no-brands", action="store_true", help="ABD marka adlarını çekme (daha az istek)")
-    parser.add_argument("--max-generics", type=int, default=300, help="marka sorgusu yapılacak en fazla etken madde")
+    parser.add_argument("--max-generics", type=int, default=500, help="marka sorgusu yapılacak en fazla etken madde")
     parser.add_argument("--sleep", type=float, default=0.3, help="istekler arası bekleme (sn)")
     args = parser.parse_args(argv)
     logging.basicConfig(level=logging.INFO, format="%(levelname)s %(message)s")

@@ -70,7 +70,7 @@ def _clean_component(text: str) -> str:
     text = _FORM_RE.sub(" ", text)
     text = re.sub(r"[^a-z0-9 \-]", " ", text)
     words = [w for w in text.split()
-             if w not in _SALT_WORDS and w not in _UNIT_WORDS and not re.fullmatch(r"[\d.\-]+", w)]
+             if w not in _SALT_WORDS and w not in _UNIT_WORDS and not re.fullmatch(r"[\d.\-]+(?:mg|mcg|g|ml|iu)?", w)]
     if not words:  # yalnızca tuz kelimelerinden oluşuyorsa (ör. "potassium chloride") olduğu gibi bırak
         words = text.split()
     return " ".join(words).strip()
@@ -454,11 +454,19 @@ def _brand_display(brand: str) -> str:
     return b.title() if b.isupper() or b.islower() else b
 
 
-def _is_generic_like(brand: str, generic: str) -> bool:
-    """"Metformin Hydrochloride" gibi marka alanına yazılmış etken madde adlarını eler."""
-    comps = set(generic.split(" + "))
+def _is_generic_like(brand: str, generic: str, known: set[str] | frozenset[str] = frozenset()) -> bool:
+    """"Metformin Hydrochloride" gibi marka alanına yazılmış etken madde adlarını eler.
+
+    `known` (katalogdaki tüm bileşenler) verilirse "Glipizide and Metformin Hydrochloride" gibi başka bir
+    kombinasyonun jenerik adı da elenir (gerçek senkronda metformin markaları arasında çıkıyordu)."""
+    own = set(generic.split(" + "))
+    comps = own | set(known)
     bc = set(canonical_components(brand))
-    return (bool(bc) and bc <= comps) or normalize(brand) in comps
+    if (bool(bc) and bc <= comps) or normalize(brand) in comps:
+        return True
+    # "Glyburide-Metformin HCl", "Pioglitazole and metformin": bileşenlerden biri bu etken madde olan ad kalıbı
+    parts = set(canonical_components(re.sub(r"(?<=[a-zA-Z])-(?=[a-zA-Z])", " and ", brand)))
+    return len(parts) > 1 and bool(parts & own)
 
 
 def _usable_term(generic: str) -> bool:
@@ -519,7 +527,7 @@ def sync_from_openfda(
     client: httpx.Client | None = None,
     sleep: float = 0.3,
     sleeper: Callable[[float], None] = time.sleep,
-    max_generics: int = 300,
+    max_generics: int = 500,
     fetch_brands: bool = True,
     classes: list[tuple[str, str]] | None = None,
 ) -> SyncReport:
@@ -562,6 +570,7 @@ def sync_from_openfda(
         report.discovered = len(discovered)
         report.discarded = sorted(set(candidates) - set(discovered))
 
+        known_components = {c for g in [*rows, *discovered] for c in g.split(" + ")}
         targets = list(dict.fromkeys(curated + sorted(discovered, key=lambda g: (g.count("+"), g))))[:max_generics]
         brand_owners: dict[str, list[str]] = {}  # normalize(marka) -> etken maddeler
         brand_label: dict[str, str] = {}
@@ -576,7 +585,7 @@ def sync_from_openfda(
                 if terms:
                     available.add(g)
                 for term, _ in terms:
-                    if _is_generic_like(term, g):
+                    if _is_generic_like(term, g, known_components):
                         continue
                     key = normalize(term)
                     brand_owners.setdefault(key, []).append(g)
