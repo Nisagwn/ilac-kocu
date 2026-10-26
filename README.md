@@ -77,7 +77,7 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 
 ```bash
 cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
-docker compose up --build                     # PostgreSQL + pgvector, Redis, nginx, API ×3, web — migration otomatik
+docker compose up --build                     # PostgreSQL + pgvector, Redis, nginx, API ×3 (kopya başına 1 CPU), web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
 
@@ -87,6 +87,7 @@ docker compose exec api python -m app.seed    # sentetik demo verisi
 | http://localhost:8000/docs | Swagger / OpenAPI (nginx iç API ağ geçidi, yalnız yerel) |
 
 Altyapı (yük dengeleme, Prometheus/Grafana/Jaeger, TLS): [`infra/README.md`](infra/README.md) · yük testi: [`docs/yuk-testi.md`](docs/yuk-testi.md)
+(aynı makinede, kopya başına 1 CPU ile 100 sanal kullanıcı: 1 kopya p95 2.6 sn → 3 kopya p95 56 ms, hatasız; bir kopya durdurulunca hata yok)
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
@@ -433,6 +434,7 @@ Sağlık verisi KVKK kapsamında özel nitelikli kişisel veridir; yaklaşım "p
 | Cihaz | Service worker `/api/*` yanıtlarını ve kişiye özel sayfaları **önbelleğe almaz** |
 | Erişim kaydı | Hekim/yakının her hasta verisi okuması `access_logs`'a yazılır (sağlık değeri olmadan); hasta kendi erişim geçmişini görür |
 | Kötüye kullanım | Giriş, kayıt ve koç uç noktalarında istek sınırı (Redis); 15 dk erişim + döndürmeli yenileme token'ı, çıkışta iptal |
+| XSS / CSP | İstek başına nonce'lu CSP (`frontend/src/middleware.ts`): `script-src 'self' 'nonce-…' 'strict-dynamic'`, satır içi betik yasak; `object-src 'none'`, `frame-ancestors 'none'`. Diğer güvenlik başlıkları (X-Frame-Options, nosniff, Referrer-Policy, Permissions-Policy, TLS'te HSTS) nginx'te |
 | Diğer | bcrypt şifre hash'i, güvenlik başlıkları, sırlar yalnızca `.env`'de, guardrail olayları içerik olmadan loglanır, yalnızca sentetik veri |
 
 Etik değerlendirme ve zarar senaryoları: [final rapor §11](docs/M5/final-rapor.md#11-etik-ve-güvenlik-değerlendirmesi) · Ölçüt → kanıt eşlemesi: [`etik-guvenlik-kontrol-listesi.md`](docs/M5/etik-guvenlik-kontrol-listesi.md)
@@ -450,6 +452,9 @@ backend/tests/
 ├── test_guardrails.py        senaryo seti (parametrik) + çıktı doğrulayıcı
 ├── test_adherence.py         uyum skoru (spec örneği: 7 günde 3 kaçırılmış doz)
 ├── test_api.py               auth, CRUD, rol bazlı erişim (404), koç, openFDA (mock)
+├── test_titck.py             TİTCK listesinden katalog üretimi + kürate liste çapraz kontrolü
+├── test_openfda_fixtures.py  gerçek openFDA yanıt kesitleriyle ayrıştırma / senkron
+├── test_openfda_live.py      canlı openFDA alan kontrolü (yalnızca -m openfda_live)
 ├── test_coach_llm.py         Claude tool döngüsü, grounding, bütçe, yedek (sahte istemci)
 ├── test_rag.py               embedding, arama, seed, openFDA ingest, /education uçları
 ├── test_summary_llm.py       haftalık anlatı: LLM, önbellek, şablon yedeği
@@ -458,7 +463,7 @@ backend/tests/
 
 **Toplam 469 backend testi** geçer (parametrik senaryolar dahil); `ruff` temizdir. Frontend: `tsc`, `eslint`, `next build` geçer. Testler gerçek Claude'a istek atmaz (sahte istemci). Koçu gerçek Claude'a karşı 232 senaryoyla denemek için: `cd backend && python -m scripts.eval_coach --live` (API anahtarı gerekir).
 
-GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler.
+GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → guardrail seti → tüm testler → PostgreSQL'de migration upgrade/downgrade/upgrade → seed) ve **frontend** (lint → tip denetimi → derleme) paralel; ikisi geçerse **docker** işi API ve web imajlarını derler. [`openfda-smoke.yml`](.github/workflows/openfda-smoke.yml) haftalık (ve elle) openFDA'ya küçük gerçek istekler atıp beklenen alanları denetler; bu canlı testler normal CI'da atlanır.
 
 ## Belgeler
 
@@ -474,6 +479,8 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → gua
 | [`docs/er-diyagrami.md`](docs/er-diyagrami.md) | ER diyagramı |
 | **M2** | |
 | [`docs/M2/README.md`](docs/M2/README.md) | M2 teslim belgeleri |
+| [`docs/M2/openfda-entegrasyonu.md`](docs/M2/openfda-entegrasyonu.md) | openFDA etiketi, TİTCK tabanlı Türkçe ilaç kataloğu, senkron ve izleme |
+| [`docs/openfda-senkron.md`](docs/openfda-senkron.md) | openFDA senkronunun gerçek API'ye karşı ölçümü (istek, süre, hata, eşleşme) |
 | **M3** | |
 | [`docs/M3/README.md`](docs/M3/README.md) | M3 teslim belgeleri |
 | **M4** | |
@@ -491,7 +498,7 @@ GitHub Actions ([`ci.yml`](.github/workflows/ci.yml)): **backend** (ruff → gua
 Tam liste: [final rapor §12](docs/M5/final-rapor.md#12-sınırlılıklar).
 
 - **Sentetik veri, klinik doğrulama yok.** Etkinlik ve güvenlik gerçek hastalarla test edilmedi.
-- **openFDA ABD etiketlerini döndürür;** Türk ticari isimleri küçük bir eşleme tablosuyla etken maddeye çevrilir.
+- **openFDA ABD etiketlerini döndürür;** Türk ticari isimleri TİTCK ruhsatlı ürün listesinden üretilen katalogla ([`drug_catalog_tr.yaml`](backend/app/data/drug_catalog_tr.yaml), 230 etken madde, 932 marka; [openFDA belgesi](docs/M2/openfda-entegrasyonu.md)) etken maddeye çevrilir. Liste haftalık güncellenir; katalog elle `python -m app.scripts.import_titck` ile yenilenir.
 - **Kural tabanlı guardrail'lerin recall sınırı vardır;** çıktı doğrulayıcı, ölçüm eşikleri ve hekime yönlendirme ikinci savunma hattıdır.
 - **Eşik değerleri** genel kabul gören değerlerdir; danışman hekim onayı ve hasta bazlı hedefler gerekir.
 - **Hekim hesabı** serbest kayıtla açılır; gerçek kullanımda yönetici onayı gerekir.

@@ -4,6 +4,7 @@ from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, Query, status
 from pydantic import BaseModel
 from sqlalchemy import case, func, select
+from sqlalchemy.orm import joinedload
 
 from app.deps import DB, CurrentUser, get_own_patient, get_patient_for_read, get_patient_for_write, require_roles
 from app.models import AccessLog, Alert, Measurement, Patient, PatientCaregiver, Role, Severity, User
@@ -36,10 +37,14 @@ def to_out(p: Patient) -> PatientOut:
 def list_patients(db: DB, user: CurrentUser):
     """Hekim: atanmış hastalar (uyum skoruna göre artan). Bakım veren: bağlı hastalar. Hasta: kendisi."""
     if user.role == Role.clinician:
-        patients = db.scalars(select(Patient).where(Patient.clinician_id == user.clinician.id)).all()
+        # Ad (users.full_name) aynı sorguda yüklenir; aksi halde hasta başına bir tembel yükleme sorgusu olur
+        patients = db.scalars(
+            select(Patient).options(joinedload(Patient.user)).where(Patient.clinician_id == user.clinician.id)
+        ).all()
     elif user.role == Role.caregiver:
         patients = db.scalars(
-            select(Patient).join(PatientCaregiver).where(PatientCaregiver.caregiver_user_id == user.id)
+            select(Patient).options(joinedload(Patient.user))
+            .join(PatientCaregiver).where(PatientCaregiver.caregiver_user_id == user.id)
         ).all()
     else:
         patients = [get_own_patient(db, user)]

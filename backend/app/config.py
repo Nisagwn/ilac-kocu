@@ -10,6 +10,12 @@ class Settings(BaseSettings):
     timezone: str = "Europe/Istanbul"  # ilaç saatleri bu saat diliminde yorumlanır
     database_url: str = "postgresql+psycopg://ilac:ilac@localhost:5432/ilac_kocu"
 
+    # Senkron uçların koştuğu iş parçacığı havuzu (anyio; varsayılan 40). Veritabanı havuzundan (5+10) çok
+    # daha büyük olmalı: aksi halde yük altında tüm iş parçacıkları bağlantı beklerken, bağlantıyı tutan
+    # istekler devam etmek için iş parçacığı bulamaz ve pool_timeout (30 sn) dolana kadar kilitlenir.
+    # Süreç başına eşzamanlı istek ayrıca uvicorn --limit-concurrency ile sınırlanır (docker-compose.yml).
+    threadpool_tokens: int = 200
+
     jwt_secret: str = "dev-secret-change-me"
     jwt_algorithm: str = "HS256"
     jwt_expire_minutes: int = 15  # erişim token'ı kısa ömürlü; oturum yenileme token'ıyla sürer

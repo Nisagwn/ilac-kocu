@@ -63,6 +63,39 @@ Süresi dolmuş token'da sayfa açılır ama ilk API çağrısı 401 döner ve i
 | `Referrer-Policy` | `strict-origin-when-cross-origin` | Yol/sorgu bilgisi başka kökene sızmaz |
 | `Permissions-Policy` | `camera=(), microphone=(), geolocation=(), payment=(), usb=(), interest-cohort=()` | Kullanılmayan tarayıcı yeteneklerini kapatır |
 
+### 3.1 İçerik Güvenliği Politikası (CSP) — istek başına nonce
+
+CSP `frontend/src/middleware.ts` içinde **her sayfa isteğinde** kurulur (Docker'da önündeki nginx CSP eklemez,
+Next.js'inkini gizlemeden geçirir; bkz. `infra/README.md`). Middleware Web Crypto ile 128 bit rastgele bir nonce
+üretir (`crypto.getRandomValues`, Edge runtime uyumlu), bunu hem yanıtın `Content-Security-Policy` başlığına hem de
+istek başlıklarına (`Content-Security-Policy`, `x-nonce`) yazar. Next.js nonce'u istek başlığındaki CSP'den okuyup
+kendi `<script>` etiketlerine (RSC yükü `self.__next_f.push` dahil) ekler.
+
+```
+default-src 'self'; script-src 'self' 'nonce-<n>' 'strict-dynamic'; style-src 'self' 'unsafe-inline';
+img-src 'self' data: blob:; font-src 'self' data:; connect-src 'self'; worker-src 'self'; manifest-src 'self';
+object-src 'none'; base-uri 'self'; form-action 'self'; frame-ancestors 'none'
+```
+
+- **`script-src`'de `'unsafe-inline'` yok.** Enjekte edilen bir `<script>` ya da `onerror=` özniteliği nonce'u
+  bilemeyeceği için çalışmaz. `'strict-dynamic'`: nonce'lu Next.js betiklerinin yüklediği parçalar da güvenilir
+  sayılır. `'unsafe-eval'` yalnız `next dev`'de eklenir (React hata ayıklama araçları); üretimde yoktur.
+- **`style-src 'unsafe-inline'` bilinçli olarak kalır:** Recharts SVG'ye, bazı bileşenler `style=""` özniteliğine
+  satır içi stil yazar; öznitelik stillerine nonce verilemez. Stil enjeksiyonu betik çalıştıramaz, risk betik
+  tarafına göre düşüktür. `style-src`'ye nonce eklenmez (nonce varken tarayıcı `'unsafe-inline'`ı yok sayar).
+- **Dinamik render zorunlu:** nonce istek başına değiştiği için kök layout `headers()` okur ve tüm sayfalar
+  dinamik render edilir (statik ön-render edilmiş HTML'de nonce olmazdı). Özel bir `<Script>`/satır içi betik
+  eklenirse nonce `(await headers()).get("x-nonce")` ile okunup verilmelidir; şu an böyle bir betik yok.
+- **Middleware kapsamı:** sayfa rotaları; `/api`, `/_next/*` (static, image), `favicon.ico`, `manifest.webmanifest`,
+  `sw.js`, `offline.html` ve `/icons` hariç. Middleware dışındaki iki HTML/JSON yolu için `next.config.ts` sabit
+  sıkı CSP verir: `/api/*` → `default-src 'none'; frame-ancestors 'none'`, `/offline.html` → betiksiz politika.
+- **Service worker** `/sw.js` aynı kökenden yüklendiği için `worker-src 'self'` ile çalışır; push aboneliği
+  tarayıcının push servisine tarayıcının kendisi tarafından gider, `connect-src`'yi etkilemez.
+
+Doğrulama (`next start`, 2026-10-26): `/giris`'te iki ardışık istekte farklı nonce; HTML'deki 20/20 `<script>`
+etiketi başlıktaki nonce'u taşıyor; headless Chrome'da (CDP) sayfa yüklenip hidrasyon tamamlandı, service worker
+`activated`, konsolda CSP ihlali yok; pozitif kontrol olarak eklenen dış görsel `img-src` ihlaliyle engellendi.
+
 Ek olarak:
 
 - `poweredByHeader: false` — `X-Powered-By: Next.js` bilgisi verilmez.

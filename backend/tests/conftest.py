@@ -76,3 +76,16 @@ def patient(client):
 @pytest.fixture()
 def clinician(client):
     return register(client, "dr.mehmet@example.com", role="clinician", title="Uzm. Dr.")
+
+
+def pytest_collection_modifyitems(config, items):
+    """Gerçek openFDA'ya istek atan testler yalnızca `-m openfda_live` ile seçildiğinde koşar.
+
+    Normal CI (`pytest -q -m "not postgres"`) ve yerel koşular ağa çıkmaz; haftalık izleme:
+    .github/workflows/openfda-smoke.yml."""
+    if "openfda_live" in (config.getoption("markexpr") or ""):
+        return
+    skip = pytest.mark.skip(reason="canlı openFDA testi: `pytest -m openfda_live` ile çalıştırın")
+    for item in items:
+        if "openfda_live" in item.keywords:
+            item.add_marker(skip)

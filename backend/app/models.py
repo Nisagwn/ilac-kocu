@@ -142,7 +142,8 @@ class Medication(Base):
 class DrugCatalog(Base):
     """İlaç kataloğu: etken madde (generic) başına bir satır; TR ve ABD ticari adları bağlıdır.
 
-    Kaynaklar: kürate Türkçe liste (app/data/drug_catalog_tr.yaml, source="tr_curated") ve isteğe bağlı
+    Kaynaklar: TİTCK ruhsatlı ürün listesinden üretilen Türkçe liste (app/data/drug_catalog_tr.yaml,
+    source="tr_curated"; üretim: app/scripts/import_titck.py) ve isteğe bağlı
     openFDA senkronu (app/services/drug_catalog.py, source="openfda"). `generic_name` normalize edilmiş
     anahtardır (kombinasyonlarda bileşenler alfabetik, " + " ile: "metformin + sitagliptin").
     `search_text` arama için normalize edilmiş (Türkçe karakter/büyük-küçük harf duyarsız) birleşik metindir.

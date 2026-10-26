@@ -3,9 +3,10 @@
 Neden: openFDA yalnızca ABD etiketlerini içerir; hasta "Glifor" ya da rastgele bir metin yazınca bilgi
 gelmez. Katalog, ilaç adını serbest metin yerine doğrulanmış bir etken maddeye (generic) bağlar.
 
-- Kürate liste (app/data/drug_catalog_tr.yaml): TR ticari ad -> etken madde. Çevrimdışı çalışır;
-  `seed_catalog` ile tabloya upsert edilir (`python -m app.seed`). `resolve_generic` (openfda.py) de
-  bu listeden beslenir.
+- Türkçe liste (app/data/drug_catalog_tr.yaml): TR ticari ad -> etken madde. TİTCK "Ruhsatlı Beşeri Tıbbi
+  Ürünler Listesi"nden ATC filtresiyle üretilir (`python -m app.scripts.import_titck`, app/services/titck.py;
+  elle bakılan kürate katman: app/data/drug_catalog_curated.yaml). Çevrimdışı çalışır; `seed_catalog` ile
+  tabloya upsert edilir (`python -m app.seed`). `resolve_generic` (openfda.py) de bu listeden beslenir.
 - openFDA senkronu (`sync_from_openfda`, CLI: `python -m app.scripts.sync_drug_catalog`): ilgili EPC
   sınıflarındaki etken maddeleri `count=openfda.generic_name.exact` ile keşfeder, her etken madde için
   `count=openfda.brand_name.exact` ile ABD marka adlarını bağlar ve `openfda_available` bayrağını günceller.
@@ -49,7 +50,7 @@ _SALT_WORDS = {
     "sodium", "calcium", "magnesium", "tartrate", "succinate", "fumarate", "hemifumarate", "medoxomil",
     "cilexetil", "erbumine", "arginine", "tosylate", "bisulfate", "hydrobromide", "monohydrate", "dihydrate",
     "hemihydrate", "trihydrate", "anhydrous", "propanediol", "phosphate", "acetate", "citrate", "mesilate",
-    "etexilate", "lysine", "benzoate",
+    "etexilate", "lysine", "benzoate", "kamedoxomil",
 }
 # Form / salım şekli ifadeleri (etken madde değildir)
 _FORM_PHRASES = [
@@ -69,7 +70,7 @@ def _clean_component(text: str) -> str:
     text = _FORM_RE.sub(" ", text)
     text = re.sub(r"[^a-z0-9 \-]", " ", text)
     words = [w for w in text.split()
-             if w not in _SALT_WORDS and w not in _UNIT_WORDS and not re.fullmatch(r"[\d.\-]+", w)]
+             if w not in _SALT_WORDS and w not in _UNIT_WORDS and not re.fullmatch(r"[\d.\-]+(?:mg|mcg|g|ml|iu)?", w)]
     if not words:  # yalnızca tuz kelimelerinden oluşuyorsa (ör. "potassium chloride") olduğu gibi bırak
         words = text.split()
     return " ".join(words).strip()
@@ -365,8 +366,16 @@ EPC_CLASSES: list[tuple[str, str]] = [
 MAX_BRANDS_PER_GENERIC = 15
 
 
+# Geçici sunucu hatası (5xx) veren tek bir sorgu atlanır; atlanan sorgu oranı bunu aşarsa senkron iptal edilir.
+MAX_FAILED_QUERY_RATIO = 0.2
+
+
 class CatalogSyncError(Exception):
     """openFDA senkronu tamamlanamadı (ağ yok, oran sınırı, beklenmeyen yanıt). Veritabanı değişmez."""
+
+
+class _QueryFailed(Exception):
+    """Tek bir openFDA sorgusu tekrarlara rağmen 5xx / zaman aşımı verdi (senkron sürer, sorgu atlanır)."""
 
 
 @dataclass
@@ -377,6 +386,9 @@ class SyncReport:
     updated: int = 0
     available: int = 0
     unavailable: list[str] = field(default_factory=list)
+    failed_queries: list[str] = field(default_factory=list)  # 5xx nedeniyle atlanan sorgular
+    retries: int = 0  # 429 / 5xx sonrası tekrar sayısı
+    discarded: list[str] = field(default_factory=list)  # gürültü olarak elenen keşif terimleri
 
 
 class _OpenFDACounter:
@@ -397,6 +409,15 @@ class _OpenFDACounter:
             self.report.requests += 1
             try:
                 resp = self.client.get(self.base_url, params=params)
+            except (httpx.TimeoutException, httpx.RemoteProtocolError, httpx.ReadError) as e:
+                # openFDA ağır `count` sorgularında zaman zaman yanıt vermez ya da bağlantıyı yanıt ortasında
+                # kapatır ("incomplete chunked read"); bağlantı kurulduğu için geçici hata gibi ele alınır
+                if attempt < 2:
+                    log.warning("openFDA %s (%s); tekrar deneniyor", type(e).__name__, search)
+                    self.report.retries += 1
+                    self.sleeper(2.0 * (attempt + 1))
+                    continue
+                raise _QueryFailed(f"{type(e).__name__}: {search}") from e
             except httpx.HTTPError as e:
                 raise CatalogSyncError(f"openFDA'ya ulaşılamadı ({type(e).__name__}: {e}). "
                                        "İnternet bağlantısını ve OPENFDA_BASE_URL ayarını kontrol edin.") from e
@@ -405,11 +426,20 @@ class _OpenFDACounter:
             if resp.status_code == 429 and attempt < 2:
                 wait = float(resp.headers.get("Retry-After") or 0) or 2.0 * (attempt + 1)
                 log.warning("openFDA oran sınırı; %.1f sn bekleniyor", wait)
+                self.report.retries += 1
                 self.sleeper(min(wait, 60.0))
                 continue
             if resp.status_code == 429:
                 raise CatalogSyncError("openFDA oran sınırı aşıldı (HTTP 429). OPENFDA_API_KEY tanımlayın "
                                        "ya da daha sonra tekrar deneyin.")
+            if resp.status_code >= 500:
+                # openFDA zaman zaman geçici "search_phase_execution_exception" (HTTP 500) döndürür; tekrar dene
+                if attempt < 2:
+                    log.warning("openFDA HTTP %s (%s); tekrar deneniyor", resp.status_code, search)
+                    self.report.retries += 1
+                    self.sleeper(2.0 * (attempt + 1))
+                    continue
+                raise _QueryFailed(f"HTTP {resp.status_code}: {search}")
             if resp.status_code >= 400:
                 raise CatalogSyncError(f"openFDA HTTP {resp.status_code}: {resp.text[:200]}")
             try:
@@ -425,11 +455,19 @@ def _brand_display(brand: str) -> str:
     return b.title() if b.isupper() or b.islower() else b
 
 
-def _is_generic_like(brand: str, generic: str) -> bool:
-    """"Metformin Hydrochloride" gibi marka alanına yazılmış etken madde adlarını eler."""
-    comps = set(generic.split(" + "))
+def _is_generic_like(brand: str, generic: str, known: set[str] | frozenset[str] = frozenset()) -> bool:
+    """"Metformin Hydrochloride" gibi marka alanına yazılmış etken madde adlarını eler.
+
+    `known` (katalogdaki tüm bileşenler) verilirse "Glipizide and Metformin Hydrochloride" gibi başka bir
+    kombinasyonun jenerik adı da elenir (gerçek senkronda metformin markaları arasında çıkıyordu)."""
+    own = set(generic.split(" + "))
+    comps = own | set(known)
     bc = set(canonical_components(brand))
-    return (bool(bc) and bc <= comps) or normalize(brand) in comps
+    if (bool(bc) and bc <= comps) or normalize(brand) in comps:
+        return True
+    # "Glyburide-Metformin HCl", "Pioglitazole and metformin": bileşenlerden biri bu etken madde olan ad kalıbı
+    parts = set(canonical_components(re.sub(r"(?<=[a-zA-Z])-(?=[a-zA-Z])", " and ", brand)))
+    return len(parts) > 1 and bool(parts & own)
 
 
 def _usable_term(generic: str) -> bool:
@@ -438,13 +476,59 @@ def _usable_term(generic: str) -> bool:
         2 < len(c) <= 60 and not re.search(r"\d", c) for c in comps)
 
 
+# openFDA EPC sınıflarında gerçek senkronda görülen gürültü (docs/openfda-senkron.md): homeopatik ürünler
+# ("attention deficit mild drops" İnsülin analoğu sınıfında), çözücüler ("water", "diluent"), OTC ürün adları
+# ("bayer aspirin extra strength", "alka-seltzer pain relief").
+_NOISE_WORDS = {
+    "drops", "drop", "liquid", "liquescence", "water", "diluent", "relief", "reliever", "strength", "strenght",
+    "formula", "pain", "original", "flavor", "low", "dose", "bayer", "buffered", "effervescent", "regular",
+    "enteric", "coated", "genuine", "powder", "homeopathic", "transdermal", "system", "granule", "extra",
+    "headache", "nsaid", "alka-seltzer", "dna", "db", "chewable", "adult", "orange", "hamamelis", "aesculus",
+}
+_BIOSIMILAR_SUFFIX = re.compile(r"^(.+)-[a-z]{4}$")  # FDA biyobenzer son eki: "insulin glargine-yfgn"
+
+
+def _clean_discovered(generic: str) -> str:
+    comps = []
+    for c in generic.split(" + "):
+        m = _BIOSIMILAR_SUFFIX.match(c)
+        comps.append(m.group(1) if m and " " in m.group(1) else c)
+    return " + ".join(sorted(set(comps)))
+
+
+def _filter_discovered(candidates: dict[str, str], known: set[str]) -> dict[str, str]:
+    """Keşfedilen etken maddelerden gürültüyü eler.
+
+    Tekli: gürültü sözcüğü içermemeli, en fazla 3 sözcük (insülinler hariç). Kombinasyon: her bileşen ya
+    katalogda (TİTCK/kürate) ya da openFDA'da tekli olarak bulunmalı; böylece "aspirin + caffeine +
+    dextromethorphan" gibi OTC soğuk algınlığı kombinasyonları ve yazım hatalı birleşimler eklenmez."""
+    single_known = {k for k in known if " " not in k and "-" not in k}
+
+    def clean_single(c: str) -> bool:
+        words = c.split()
+        if set(words) & _NOISE_WORDS or (len(words) > 3 and words[0] != "insulin"):
+            return False
+        # Ayırıcısız yazılmış kombinasyon ("aspirin caffeine", "glyburide-metformin"): kendi satırı zaten var
+        parts = re.split(r"[\s-]+", c)
+        return c in known or len(parts) == 1 or sum(p in single_known for p in parts) < 1
+
+    singles = {g for g in candidates if " + " not in g and clean_single(g)}
+    ok_components = known | singles
+    out: dict[str, str] = {}
+    for g, label in candidates.items():
+        comps = g.split(" + ")
+        if len(comps) == 1 and g in singles or len(comps) > 1 and all(c in ok_components for c in comps):
+            out[g] = label
+    return out
+
+
 def sync_from_openfda(
     db: Session,
     *,
     client: httpx.Client | None = None,
     sleep: float = 0.3,
     sleeper: Callable[[float], None] = time.sleep,
-    max_generics: int = 300,
+    max_generics: int = 500,
     fetch_brands: bool = True,
     classes: list[tuple[str, str]] | None = None,
 ) -> SyncReport:
@@ -455,39 +539,62 @@ def sync_from_openfda(
       2. Kürate + keşfedilen her etken madde için `count=openfda.brand_name.exact` -> ABD marka adları ve
          `openfda_available`. Bir marka birden çok etken maddede çıkarsa en çok bileşenliye (kombinasyona)
          bağlanır (metformin sorgusu Janumet'i de döndürür; Janumet sitagliptin + metformin'e aittir).
-    Hata olursa hiçbir değişiklik yazılmaz ve CatalogSyncError fırlatılır."""
+    Keşfedilen terimlerden homeopatik/OTC gürültü elenir (`_filter_discovered`, `discarded`). Geçici 5xx
+    yanıtları ve zaman aşımları iki kez tekrarlanır; yine başarısız olan tek sorgu atlanır (`failed_queries`;
+    o etken maddenin satırı değişmez). Ağ hatası, 429 ya da çok sayıda başarısız sorguda hiçbir değişiklik yazılmaz ve
+    CatalogSyncError fırlatılır."""
     report = SyncReport()
     own_client = client is None
-    client = client or httpx.Client(timeout=20)
+    client = client or httpx.Client(timeout=45)  # ağır count sorguları 20+ sn sürebiliyor
     api = _OpenFDACounter(client, sleep=sleep, sleeper=sleeper, report=report)
     try:
         seed_catalog(db)
         rows = {r.generic_name: r for r in db.scalars(select(DrugCatalog))}
         curated = [g for g, r in rows.items() if r.source == SOURCE_TR]
 
-        discovered: dict[str, str] = {}  # generic -> TR sınıf adı
-        for epc, tr_label in classes if classes is not None else EPC_CLASSES:
-            for term, _count in api.count(f'openfda.pharm_class_epc:"{epc}"', "openfda.generic_name.exact"):
-                g = canonical_generic(term)
-                if _usable_term(g):
-                    discovered.setdefault(g, tr_label)
-        report.discovered = len(discovered)
+        def safe_count(search: str, field_name: str, limit: int = 1000) -> list[tuple[str, int]] | None:
+            try:
+                return api.count(search, field_name, limit)
+            except _QueryFailed as e:
+                log.warning("openFDA sorgusu atlandı: %s", e)
+                report.failed_queries.append(search)
+                return None
 
+        candidates: dict[str, str] = {}  # generic -> TR sınıf adı
+        for epc, tr_label in classes if classes is not None else EPC_CLASSES:
+            for term, _count in safe_count(f'openfda.pharm_class_epc:"{epc}"', "openfda.generic_name.exact") or []:
+                g = _clean_discovered(canonical_generic(term))
+                if _usable_term(g):
+                    candidates.setdefault(g, tr_label)
+        known = {c for g in rows for c in g.split(" + ")}
+        discovered = _filter_discovered(candidates, known)
+        report.discovered = len(discovered)
+        report.discarded = sorted(set(candidates) - set(discovered))
+
+        known_components = {c for g in [*rows, *discovered] for c in g.split(" + ")}
         targets = list(dict.fromkeys(curated + sorted(discovered, key=lambda g: (g.count("+"), g))))[:max_generics]
         brand_owners: dict[str, list[str]] = {}  # normalize(marka) -> etken maddeler
         brand_label: dict[str, str] = {}
         available: set[str] = set(discovered)
+        skipped: set[str] = set()  # marka sorgusu başarısız: satırın mevcut durumu korunur
         if fetch_brands:
             for g in targets:
-                terms = api.count(generic_search_expr(g), "openfda.brand_name.exact", limit=100)
+                terms = safe_count(generic_search_expr(g), "openfda.brand_name.exact", limit=100)
+                if terms is None:
+                    skipped.add(g)
+                    continue
                 if terms:
                     available.add(g)
                 for term, _ in terms:
-                    if _is_generic_like(term, g):
+                    if _is_generic_like(term, g, known_components):
                         continue
                     key = normalize(term)
                     brand_owners.setdefault(key, []).append(g)
                     brand_label.setdefault(key, _brand_display(term))
+
+        if report.failed_queries and len(report.failed_queries) > MAX_FAILED_QUERY_RATIO * report.requests:
+            raise CatalogSyncError(f"openFDA sorgularının çoğu başarısız ({len(report.failed_queries)}/"
+                                   f"{report.requests}, HTTP 5xx). Daha sonra tekrar deneyin.")
 
         us_brands: dict[str, list[str]] = {}
         for key, owners in brand_owners.items():
@@ -497,6 +604,8 @@ def sync_from_openfda(
                     us_brands.setdefault(o, []).append(brand_label[key])
 
         for g in targets:
+            if g in skipped:
+                continue
             row = rows.get(g)
             is_available = g in available
             brands_us = us_brands.get(g, [])[:MAX_BRANDS_PER_GENERIC]

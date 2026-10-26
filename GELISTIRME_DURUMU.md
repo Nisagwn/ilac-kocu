@@ -68,6 +68,25 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 6. ✅ Backend testleri (512), ruff, frontend lint/build başarılı. `docker compose up --build` başarılı; API readiness ve web giriş sayfası doğrulandı. Giriş/ilaç/doz/koç/hekim akışlarıyla uçtan uca demo henüz yapılmadı.
 7. Belgeler: `docs/er-diyagrami.md` güncelle (yeni tablolar: drug_catalog, idempotency_keys, weekly_summaries?, coach_jobs, refresh_tokens, access_logs), README'ye ER diyagramını göm, README "Durum" tablosu.
 
+## Tur 2: bilinen sınırlılıkların giderilmesi (2026-10-26)
+
+### F — Türkçe ilaç kataloğu TİTCK'ya dayalı + openFDA gerçek senkron
+- [x] TİTCK ruhsatlı ürün listesinden (Excel) ATC filtresiyle (A10, C02, C03, C07, C08, C09, C10, B01) katalog üreten betik — `python -m app.scripts.import_titck` (`app/services/titck.py`); TİTCK 23.10.2026 listesinden `drug_catalog_tr.yaml` yeniden üretildi: 230 etken madde/kombinasyon, 932 TR marka; eski elle derlenmiş liste `drug_catalog_curated.yaml` (kürate katman) oldu; `openpyxl==3.1.5`
+- [x] Kürate listenin TİTCK listesiyle çapraz kontrol testi; ATC kodu → ilaç sınıfı — `tests/test_titck.py` (temsili fikstür `tests/fixtures/titck_sample.csv`); TİTCK'da bulunmayan 15 kürate marka `aliases`'a taşındı
+- [x] openFDA senkronunu gerçek API'ye karşı bir kez koştur, sonuçları belgeye yaz — `docs/openfda-senkron.md` (6 koşu; geçici 500, zaman aşımı, kopan bağlantı ve keşif gürültüsü bulundu ve düzeltildi; son koşu 182 sn, 292 istek, 153/230 TR etken madde openFDA'da)
+- [x] Gerçek openFDA yanıtından test fikstürü; haftalık/elle tetiklenen openFDA erişim iş akışı — `tests/fixtures/openfda_*.json`, `tests/test_openfda_fixtures.py`; `.github/workflows/openfda-smoke.yml` → `pytest -m openfda_live` (normal koşuda atlanır)
+
+### G — Nonce tabanlı CSP
+- [x] `middleware.ts` istek başına nonce + `script-src 'nonce-…' 'strict-dynamic'`; CSP Nginx'ten Next.js'e taşınır
+- [x] Diğer güvenlik başlıkları Nginx'te kalır; tarayıcıda CSP ihlali yok (headless Chrome, `/giris`; nginx imajıyla uçtan uca denenmedi)
+
+### H — Yük testi düzeltmeleri
+- [x] API kopyalarına CPU sınırı (`API_CPUS` vars. 1, `API_MEMORY` vars. 512M)
+- [x] k6: hesap başına tek giriş (`setup()`), süre dolumu/401'de yalnız o VU yeniden girer
+- [x] Hekim hasta listesindeki N+1 sorgunun giderilmesi (2 ve 20 hastada 7 sorgu; `tests/test_patient_list_queries.py`)
+- [x] 1 vs 3 kopya ölçümünün tekrarı, `docs/yuk-testi.md` güncellemesi (1 kopya p95 2569 ms → 3 kopya 56 ms; durdurmada hata yok)
+- [x] Ölçümde bulunan iş parçacığı/DB havuzu kilitlenmesi giderildi (`THREADPOOL_TOKENS` 200, `API_LIMIT_CONCURRENCY` 150)
+
 ## Kalan (bu turun dışında)
 - Demo videosu (M5) — kullanıcı çekecek.
 - Final raporda "AI Tools Usage" bölümü — kullanıcı yazacak (`ilac-uyum-kocu/docs/ai-araclari-kullanimi.md` kaydından).
@@ -80,3 +99,5 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - 2026-10-17: Doğrulama: 512 test, ruff, frontend lint/build, tek alembic head ✅. Dosya bazlı denetimle tamamlananlar işaretlendi ([x] bitti, [~] kısmen). Eksikler için 5 ajan `git reset --hard gelistirme` ile senkronlanıp kaldıkları yerden devam ettirildi. Haftalık özet migration'ı gerekirse `0011_weekly_summaries` (down: 0010).
 - 2026-10-18: Ajanlar ikinci kez limite takıldı. Commit'lenmemiş işler worktree'lerde duruyordu (A: combobox+test, B: frontend v1+test_platform, C: compose/grafana/k6/prometheus, D: leader/scheduler/weekly/DLQ + 0011 migration; E: 3 commit). Beşi de `reset` yapmadan kaldıkları yerden devam ettirildi.
 - 2026-10-18: A, B, C, D, E tamamlandı ve `gelistirme`'ye birleştirildi (api.ts/types.ts çakışmaları elle çözüldü). Idempotency temizliğinde Windows saat çözünürlüğünden kaynaklı kararsız test düzeltildi (`<=`). Doğrulama: 656 test geçti (10 PostgreSQL testi yerelde atlandı), ruff, frontend lint/build ✅, alembic head `0011_weekly_summaries`. Docker: nginx + api×3 + web + worker sağlıklı; uygulama http://localhost, Swagger http://127.0.0.1:8000/docs. Uçtan uca: TR adla ilaç arama, katalogdan ekleme (verified), listede olmayan (verified=false), openFDA etiketi, idempotency tekrarı, 3 kopyaya eşit dağılım, güvenlik başlıkları ✅. ER diyagramı modellerden yeniden üretildi ve README'ye gömüldü.
+- 2026-10-26: Tur 2 başladı: F (TİTCK + openFDA), G (nonce CSP), H (yük testi) ajanları paralel.
+- 2026-10-26: Tur 2 (F, G, H) tamamlandı. Doğrulama: 725 test geçti (13 atlandı: 10 PostgreSQL + 3 canlı openFDA), ruff, frontend lint/build ✅. Docker (nginx + api×3): tek CSP başlığı, istek başına değişen nonce, 20/20 script nonce'lu; tarayıcıda hekim hasta detayı (klinik özet, doz takvimi, Recharts grafikleri, doğrulanmamış ilaç rozeti) konsolda hata/CSP ihlali olmadan çalıştı. TİTCK kataloğu seed ile yüklendi (220 kayıt).

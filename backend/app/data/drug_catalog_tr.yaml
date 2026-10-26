@@ -1,325 +1,1362 @@
-# Kürate Türkçe ilaç kataloğu (Tip 2 diyabet, hipertansiyon ve sık eşlik eden tedaviler).
+# Türkçe ilaç kataloğu — OTOMATİK ÜRETİLMİŞTİR, ELLE DÜZENLEMEYİN.
+# Kaynak: TİTCK, 23.10.2026 (Ruhsatlı Beşeri Tıbbi Ürünler Listesi, https://www.titck.gov.tr/dinamikmodul/85)
+# Üretim: python -m app.scripts.import_titck <TİTCK listesi .xlsx>
+# Kürate katman (görünen ad, takma ad, sınıf adı düzeltmeleri): app/data/drug_catalog_curated.yaml
+# ATC filtresi: A10, B01, C02, C03, C07, C08, C09, C10. Askıdaki ürünler hariç.
+# İçerik: 230 etken madde / kombinasyon, 932 TR marka (3476 ruhsatlı ürün satırından).
 #
-# openFDA yalnızca ABD etiketlerini içerir; Türkiye'deki ticari adlar (Glifor, Concor...) orada yoktur.
-# Bu dosya TR ticari adı -> etken madde (generic, İngilizce INN; openFDA sorgusu için) eşlemesinin
-# tek doğruluk kaynağıdır. `python -m app.seed` her çalıştırmada drug_catalog tablosuna upsert eder;
-# openFDA senkronu (`python -m app.scripts.sync_drug_catalog`) isteğe bağlıdır ve ABD marka adlarını ekler.
-#
-# Alanlar:
-#   generic      etken madde(ler); kombinasyonlarda " + " ile ayrılır (sıra önemsizdir, anahtar sıralanır)
-#   display      arayüzde gösterilecek ad (verilmezse generic'ten üretilir)
-#   pharm_class  Türkçe farmakolojik sınıf
-#   brands       Türkiye'de yaygın ticari adlar
-#   aliases      (isteğe bağlı) aranabilir ek adlar, ör. Türkçe etken madde adı
-#
-# Not: Bu liste eğitim/demo amaçlıdır; ruhsat durumu için TİTCK kayıtları esas alınmalıdır.
+# Alanlar: generic (İngilizce, openFDA sorgusu için), display (Türkçe görünen ad), pharm_class (ATC'den
+# Türkçe sınıf), atc (TİTCK ATC kodları), brands (ürün adından sadeleştirilmiş TR markalar; etken madde
+# adıyla başlayan jenerik ürünler hariç), products (ruhsatlı ürün/ambalaj sayısı), aliases (aranabilir ek ad).
+# Not: eğitim/demo amaçlıdır; tedavi kararı ve ruhsat durumu için güncel TİTCK kaydı esastır.
 
-# ------------------------------------------------------------------ Diyabet (oral)
-- generic: metformin
-  pharm_class: Biguanid (oral antidiyabetik)
-  brands: [Glifor, Glucophage, Matofin, Diaformin, Gluformin]
-- generic: glimepiride
-  display: Glimepirid
-  pharm_class: Sülfonilüre (oral antidiyabetik)
-  brands: [Amaryl]
-- generic: gliclazide
-  display: Gliklazid
-  pharm_class: Sülfonilüre (oral antidiyabetik)
-  brands: [Diamicron, Diamicron MR, Oramikron, Glumikron]
-- generic: glipizide
-  display: Glipizid
-  pharm_class: Sülfonilüre (oral antidiyabetik)
-  brands: [Minidiab]
-- generic: repaglinide
-  display: Repaglinid
-  pharm_class: Meglitinid (oral antidiyabetik)
-  brands: [NovoNorm]
+
+# ------------------------------------------------------------------ A10 — Diyabet ilaçları
 - generic: acarbose
   display: Akarboz
   pharm_class: Alfa-glukozidaz inhibitörü
-  brands: [Glucobay]
-- generic: pioglitazone
-  display: Pioglitazon
-  pharm_class: Tiyazolidindion (oral antidiyabetik)
-  brands: [Actos]
-- generic: sitagliptin
-  pharm_class: DPP-4 inhibitörü
-  brands: [Januvia]
-- generic: vildagliptin
-  pharm_class: DPP-4 inhibitörü
-  brands: [Galvus]
-- generic: saxagliptin
-  display: Saksagliptin
-  pharm_class: DPP-4 inhibitörü
-  brands: [Onglyza]
-- generic: linagliptin
-  pharm_class: DPP-4 inhibitörü
-  brands: [Trajenta]
-- generic: sitagliptin + metformin
-  pharm_class: DPP-4 inhibitörü + biguanid
-  brands: [Janumet]
-- generic: vildagliptin + metformin
-  pharm_class: DPP-4 inhibitörü + biguanid
-  brands: [Galvus Met, Galvusmet]
-- generic: saxagliptin + metformin
-  display: Saksagliptin + Metformin
-  pharm_class: DPP-4 inhibitörü + biguanid
-  brands: [Kombiglyze XR]
-- generic: linagliptin + metformin
-  pharm_class: DPP-4 inhibitörü + biguanid
-  brands: [Jentadueto]
-- generic: empagliflozin
-  pharm_class: SGLT2 inhibitörü
-  brands: [Jardiance]
+  atc: [A10BF01]
+  products: 36
+  brands: [Glucobay, Acaris, Acnor, Arokan, Glucar, Glynose]
+- generic: chlorpropamide
+  display: Klorpropamid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB02]
+  products: 4
+  brands: [Orbin]
 - generic: dapagliflozin
   pharm_class: SGLT2 inhibitörü
-  brands: [Forziga]
-- generic: empagliflozin + metformin
-  pharm_class: SGLT2 inhibitörü + biguanid
-  brands: [Synjardy]
-- generic: dapagliflozin + metformin
-  pharm_class: SGLT2 inhibitörü + biguanid
-  brands: [Xigduo XR]
-- generic: empagliflozin + linagliptin
-  pharm_class: SGLT2 inhibitörü + DPP-4 inhibitörü
-  brands: [Glyxambi]
-
-# ------------------------------------------------------------------ Diyabet (enjeksiyon)
-- generic: liraglutide
-  display: Liraglutid
-  pharm_class: GLP-1 reseptör agonisti
-  brands: [Victoza]
+  atc: [A10BK01]
+  products: 36
+  brands: [Forziga, Calira, Danipta, Dapadap, Dapgeon, Dapitus, Daplig, Daprenza, Glazone, Glyxar, Jaglif, Trenicat]
 - generic: dulaglutide
   display: Dulaglutid
   pharm_class: GLP-1 reseptör agonisti
+  atc: [A10BJ05]
+  products: 4
   brands: [Trulicity]
-- generic: semaglutide
-  display: Semaglutid
-  pharm_class: GLP-1 reseptör agonisti
-  brands: [Ozempic]
+- generic: empagliflozin
+  pharm_class: SGLT2 inhibitörü
+  atc: [A10BK03]
+  products: 28
+  brands: [Jardiance, Emjardi, Emladip, Empacros, Empafel, Empalfo, Empance, Empator, Empazi, Epiclo, Gliflomed, Glyzarda, Jardifloz, Jardolix, Ubıka]
 - generic: exenatide
   display: Eksenatid
   pharm_class: GLP-1 reseptör agonisti
+  atc: [A10BJ01]
+  products: 2
   brands: [Byetta]
-- generic: insulin glargine
-  display: İnsülin glarjin
-  pharm_class: İnsülin (uzun etkili)
-  brands: [Lantus, Toujeo, Basaglar]
-- generic: insulin detemir
-  display: İnsülin detemir
-  pharm_class: İnsülin (uzun etkili)
-  brands: [Levemir]
-- generic: insulin degludec
-  display: İnsülin degludek
-  pharm_class: İnsülin (uzun etkili)
-  brands: [Tresiba]
+- generic: glibornuride
+  display: Glibornurid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB04]
+  products: 2
+  brands: [Glutril]
+- generic: gliclazide
+  display: Gliklazid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB09]
+  products: 56
+  brands: [Diamicron, Diamicron MR, Oramikron, Glumikron, As-Gliklaz, Betanorm, Betanorm MR, Diaklazid, Diaklazid MR, Dialive MR, Efikas MR, Glicla MR, Medlazid MR, Mellidys MR]
+- generic: glimepiride
+  display: Glimepirid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB12]
+  products: 42
+  brands: [Amaryl, Diameprid, Glimax, Insuprid, Mepiriks, Tideca]
+- generic: glipizide
+  display: Glipizid
+  aliases: [Minidiab]
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB07]
+  products: 2
+  brands: [Glucotrol-XL]
+- generic: glyburide
+  display: Glibenklamid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  atc: [A10BB01]
+  products: 11
+  brands: [Dianorm, Diyaben, Gentisod, Gliben, Orabetik]
 - generic: insulin aspart
   display: İnsülin aspart
   pharm_class: İnsülin (hızlı etkili)
-  brands: [NovoRapid]
-- generic: insulin lispro
-  display: İnsülin lispro
-  pharm_class: İnsülin (hızlı etkili)
-  brands: [Humalog]
+  atc: [A10AB05, A10AD05]
+  products: 10
+  brands: [NovoRapid, Fiasp, Novomix]
+- generic: insulin degludec
+  display: İnsülin degludek
+  pharm_class: İnsülin (uzun etkili)
+  atc: [A10AE06]
+  products: 9
+  brands: [Tresiba]
+- generic: insulin detemir
+  display: İnsülin detemir
+  pharm_class: İnsülin (uzun etkili)
+  atc: [A10AE05]
+  products: 2
+  brands: [Levemir]
+- generic: insulin glargine
+  display: İnsülin glarjin
+  pharm_class: İnsülin (uzun etkili)
+  atc: [A10AE04]
+  products: 15
+  brands: [Lantus, Toujeo, Basaglar, Basalog One, Glarin, Glaritus]
 - generic: insulin glulisine
   display: İnsülin glulizin
   pharm_class: İnsülin (hızlı etkili)
+  atc: [A10AB06]
+  products: 1
   brands: [Apidra]
+- generic: insulin human
+  display: İnsan insülini
+  pharm_class: "İnsülin (hızlı / kısa etkili)"
+  atc: [A10AB01]
+  products: 4
+  brands: [Actrapid HM, Humulin R]
+- generic: insulin isophane
+  display: İzofan insan insülini (NPH)
+  pharm_class: İnsülin (orta etkili)
+  atc: [A10AC01]
+  products: 4
+  brands: [Humulin N, Insulatard HM]
+- generic: insulin lispro
+  display: İnsülin lispro
+  pharm_class: İnsülin (hızlı etkili)
+  atc: [A10AB04, A10AD04]
+  products: 13
+  brands: [Humalog]
+- generic: linagliptin
+  pharm_class: DPP-4 inhibitörü
+  atc: [A10BH05]
+  products: 13
+  brands: [Trajenta, Atalyna, Dialipta, Dianovia, Elnaglip, Linadiya, Linatin, Linazep, Lincretin, Liniga, Lintreja, Lizera, Snoxx]
+- generic: liraglutide
+  display: Liraglutid
+  pharm_class: GLP-1 reseptör agonisti
+  atc: [A10BJ02]
+  products: 8
+  brands: [Victoza, Saxenda]
+- generic: metformin
+  aliases: [Glucophage]
+  pharm_class: Biguanid (oral antidiyabetik)
+  atc: [A10BA02]
+  products: 96
+  brands: [Glifor, Matofin, Diaformin, Gluformin, Atamet, Diabest, Diaformin XR, Diamet, Diormin, Glifor SR, Glimeton, Glinext, Glisus, Glucotard, Gluforce, Glukofen, Insufor, Mefoday MR, Mernepta, Metaformal, Metforix, Metfull, Metodel, Metodel SR, Metvel, Metvel SR]
+- generic: miglitol
+  pharm_class: Alfa-glukozidaz inhibitörü
+  atc: [A10BF02]
+  products: 16
+  brands: [Diabig, Migdia, Miglitec, Migryl, Miol]
+- generic: nateglinide
+  display: Nateglinid
+  pharm_class: Meglitinid (oral antidiyabetik)
+  atc: [A10BX03]
+  products: 21
+  brands: [Dianide, Incuria, Inglex, Naglid, Natalix, Nateful, Natgel, Reaglid, Teglix]
+- generic: pioglitazone
+  display: Pioglitazon
+  pharm_class: Tiyazolidindion (oral antidiyabetik)
+  atc: [A10BG03]
+  products: 62
+  brands: [Actos, Dialic, Dropia, Dyndion, Glifix, Pioforce, Piofox, Piondia]
+- generic: repaglinide
+  display: Repaglinid
+  aliases: [NovoNorm]
+  pharm_class: Meglitinid (oral antidiyabetik)
+  atc: [A10BX02]
+  products: 21
+  brands: [Diafree, Repafix, Replic, Sergilex]
+- generic: saxagliptin
+  display: Saksagliptin
+  pharm_class: DPP-4 inhibitörü
+  atc: [A10BH03]
+  products: 1
+  brands: [Onglyza]
+- generic: semaglutide
+  display: Semaglutid
+  pharm_class: GLP-1 reseptör agonisti
+  atc: [A10BJ06]
+  products: 20
+  brands: [Ozempic, Rybelsus, Wegovy]
+- generic: sitagliptin
+  pharm_class: DPP-4 inhibitörü
+  atc: [A10BH01]
+  products: 31
+  brands: [Januvia, Arliptin, Asugar, Glipass, Glipdia, Gluvia, Jasita, Maralit, Sanosita, Siabet, Tofaglip]
+- generic: tirzepatide
+  display: Tirzepatid
+  pharm_class: "GIP/GLP-1 reseptör agonisti"
+  atc: [A10BX16]
+  products: 24
+  brands: [Mounjaro]
+- generic: vildagliptin
+  pharm_class: DPP-4 inhibitörü
+  atc: [A10BH02]
+  products: 39
+  brands: [Galvus, Diyatix, Glipta, Glivanta, Glividin, Orvexia, Taglin, Vefilda, Vidaptin, Viglida, Vilbioda, Vilcoza, Vildabet, Vildalip, Vildega, Viptin]
+- generic: voglibose
+  display: Vogliboz
+  pharm_class: Alfa-glukozidaz inhibitörü
+  atc: [A10BF03]
+  products: 4
+  brands: [Diavog]
+- generic: "dapagliflozin + metformin"
+  pharm_class: "SGLT2 inhibitörü + biguanid"
+  atc: [A10BD15]
+  products: 19
+  brands: [Xigduo XR, Anerva XR, Calira-Met, Calira-Met XR, Dapadapmet XR, Dapavel Plus, Dapgeon Plus XR, Glazonemet XR]
+- generic: "empagliflozin + linagliptin"
+  pharm_class: "SGLT2 inhibitörü + DPP-4 inhibitörü"
+  atc: [A10BD19]
+  products: 2
+  brands: [Glyxambi]
+- generic: "empagliflozin + metformin"
+  pharm_class: "SGLT2 inhibitörü + biguanid"
+  atc: [A10BD20]
+  products: 26
+  brands: [Synjardy, Emjardi-Met, Emladipmet, Empacros Met, Empafel Met, Empance Met, Empavera Met, Epiclo-Met]
+- generic: "gliclazide + metformin"
+  display: "Gliklazid + Metformin"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD02]
+  products: 9
+  brands: [Duodia, Glifor Plus]
+- generic: "glyburide + metformin"
+  display: "Glibenklamid + Metformin"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD02]
+  products: 16
+  brands: [Duplax, Insucomb]
+- generic: "insulin aspart + insulin degludec"
+  display: "İnsülin aspart + İnsülin degludek"
+  pharm_class: "İnsülin (karışım: hızlı + orta etkili)"
+  atc: [A10AD06]
+  products: 6
+  brands: [Ryzodeg]
+- generic: "insulin degludec + liraglutide"
+  display: "İnsülin degludek + Liraglutid"
+  pharm_class: "Uzun etkili insülin + GLP-1 reseptör agonisti"
+  atc: [A10AE56]
+  products: 4
+  brands: [Xultophy]
+- generic: "insulin glargine + lixisenatide"
+  display: "İnsülin glarjin + Liksisenatid"
+  pharm_class: "Uzun etkili insülin + GLP-1 reseptör agonisti"
+  atc: [A10AE54]
+  products: 4
+  brands: [Soliqua]
+- generic: "insulin human + insulin isophane"
+  display: "İnsan insülini + İzofan insan insülini (NPH)"
+  pharm_class: "İnsülin (karışım: hızlı + orta etkili)"
+  atc: [A10AD01, A10AD30]
+  products: 3
+  brands: [Humulin-M, Mixtard]
+- generic: "insulin lispro + insulin lispro protamine"
+  display: "İnsülin lispro + İnsülin lispro protamin"
+  pharm_class: "İnsülin (karışım: hızlı + orta etkili)"
+  atc: [A10AD04]
+  products: 8
+  brands: [Humalog Mix]
+- generic: "linagliptin + metformin"
+  aliases: [Jentadueto]
+  pharm_class: "DPP-4 inhibitörü + biguanid"
+  atc: [A10BD, A10BD11]
+  products: 16
+  brands: [Dialipta Met, Dianovia Met, Linatin Met, Linazep Plus, Liniga Plus, Lintrejamet, Snoxx-Met, Trajenta Duo]
+- generic: "metformin + miglitol"
+  pharm_class: Antidiyabetik (insülin dışı)
+  atc: [A10B]
+  products: 2
+  brands: [Meglitis]
+- generic: "metformin + nateglinide"
+  display: "Metformin + Nateglinid"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD]
+  products: 6
+  brands: [Natmet, Natplus]
+- generic: "metformin + pioglitazone"
+  display: "Metformin + Pioglitazon"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD05]
+  products: 44
+  brands: [Dropia-Met, Glifix Plus, Glifix Plus SR, Pio-Met, Preko, Prenorm, Prenorm MR, Returin]
+- generic: "metformin + repaglinide"
+  display: "Metformin + Repaglinid"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD14]
+  products: 10
+  brands: [Pareglin, Repamef]
+- generic: "metformin + sitagliptin"
+  pharm_class: "DPP-4 inhibitörü + biguanid"
+  atc: [A10BD07]
+  products: 22
+  brands: [Janumet, Arliptin Met, Arliptin Met XR, Glipamet, Jasita Met, Maralit Plus, Sanosita Plus, Sitamerin]
+- generic: "metformin + vildagliptin"
+  aliases: [Galvusmet]
+  pharm_class: "DPP-4 inhibitörü + biguanid"
+  atc: [A10BD08]
+  products: 48
+  brands: [Galvus Met, Diyatix Plus, Glividin Met, Taglin Met, Vidaptin Met, Viglida Plus, Vildabet Met, Vildega Plus, Vilmet, Viptin Met]
+- generic: "nateglinide + thioctic acid"
+  display: "Nateglinid + Alfa lipoik asit"
+  pharm_class: Meglitinid (oral antidiyabetik)
+  atc: [A10BX03]
+  products: 2
+  brands: [Nat-Ala]
+- generic: "pioglitazone + thioctic acid"
+  display: "Pioglitazon + Alfa lipoik asit"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD]
+  products: 6
+  brands: [Pio-Ala]
+- generic: "metformin + pioglitazone + thioctic acid"
+  display: "Metformin + Pioglitazon + Alfa lipoik asit"
+  pharm_class: Oral antidiyabetik kombinasyonu
+  atc: [A10BD05]
+  products: 6
+  brands: [Pional]
 
-# ------------------------------------------------------------------ Hipertansiyon
-- generic: amlodipine
-  display: Amlodipin
-  pharm_class: Kalsiyum kanal blokeri
-  brands: [Norvasc]
-- generic: lercanidipine
-  display: Lerkanidipin
-  pharm_class: Kalsiyum kanal blokeri
-  brands: [Zanidip]
-- generic: nifedipine
-  display: Nifedipin
-  pharm_class: Kalsiyum kanal blokeri
-  brands: [Adalat Crono]
-- generic: diltiazem
-  pharm_class: Kalsiyum kanal blokeri
-  brands: [Diltizem]
-- generic: verapamil
-  pharm_class: Kalsiyum kanal blokeri
-  brands: [Isoptin]
-- generic: perindopril
-  pharm_class: ACE inhibitörü
-  brands: [Coversyl]
-- generic: perindopril + indapamide
-  display: Perindopril + İndapamid
-  pharm_class: ACE inhibitörü + diüretik
-  brands: [Coversyl Plus]
-- generic: perindopril + amlodipine
-  display: Perindopril + Amlodipin
-  pharm_class: ACE inhibitörü + kalsiyum kanal blokeri
-  brands: [Coveram]
-- generic: ramipril
-  pharm_class: ACE inhibitörü
-  brands: [Delix]
-- generic: ramipril + hydrochlorothiazide
-  display: Ramipril + Hidroklorotiyazid
-  pharm_class: ACE inhibitörü + diüretik
-  brands: [Delix Plus]
-- generic: enalapril
-  pharm_class: ACE inhibitörü
-  brands: [Konveril, Renitec]
-- generic: lisinopril
-  pharm_class: ACE inhibitörü
-  brands: [Zestril]
-- generic: cilazapril
-  display: Silazapril
-  pharm_class: ACE inhibitörü
-  brands: [Inhibace]
-- generic: metoprolol
-  pharm_class: Beta bloker
-  brands: [Beloc, Beloc Zok]
-- generic: bisoprolol
-  pharm_class: Beta bloker
-  brands: [Concor]
-- generic: bisoprolol + hydrochlorothiazide
-  display: Bisoprolol + Hidroklorotiyazid
-  pharm_class: Beta bloker + diüretik
-  brands: [Concor Plus]
-- generic: nebivolol
-  pharm_class: Beta bloker
-  brands: [Vasoxen]
-- generic: carvedilol
-  display: Karvedilol
-  pharm_class: Alfa/beta bloker
-  brands: [Dilatrend]
-- generic: atenolol
-  pharm_class: Beta bloker
-  brands: [Tensinor]
-- generic: telmisartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Micardis, Pritor]
-- generic: telmisartan + hydrochlorothiazide
-  display: Telmisartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Micardis Plus]
-- generic: valsartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Diovan]
-- generic: valsartan + hydrochlorothiazide
-  display: Valsartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Co-Diovan]
-- generic: valsartan + amlodipine
-  display: Valsartan + Amlodipin
-  pharm_class: ARB + kalsiyum kanal blokeri
-  brands: [Exforge]
-- generic: candesartan
-  display: Kandesartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Atacand]
-- generic: candesartan + hydrochlorothiazide
-  display: Kandesartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Atacand Plus]
-- generic: losartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Cozaar]
-- generic: losartan + hydrochlorothiazide
-  display: Losartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Hyzaar]
-- generic: irbesartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Karvea, Aprovel]
-- generic: irbesartan + hydrochlorothiazide
-  display: İrbesartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Karvezide]
-- generic: olmesartan
-  pharm_class: Anjiyotensin reseptör blokeri (ARB)
-  brands: [Olmetec]
-- generic: olmesartan + amlodipine
-  display: Olmesartan + Amlodipin
-  pharm_class: ARB + kalsiyum kanal blokeri
-  brands: [Sevikar]
-- generic: olmesartan + hydrochlorothiazide
-  display: Olmesartan + Hidroklorotiyazid
-  pharm_class: ARB + diüretik
-  brands: [Olmetec Plus]
-- generic: indapamide
-  display: İndapamid
-  pharm_class: Tiyazid benzeri diüretik
-  brands: [Fludex]
-- generic: hydrochlorothiazide
-  display: Hidroklorotiyazid
-  pharm_class: Tiyazid diüretik
-  brands: []
-- generic: furosemide
-  display: Furosemid
-  pharm_class: Kıvrım (loop) diüretiği
-  brands: [Lasix]
-- generic: spironolactone
-  display: Spironolakton
-  pharm_class: Aldosteron antagonisti (potasyum tutucu diüretik)
-  brands: [Aldactone]
-- generic: doxazosin
-  display: Doksazosin
-  pharm_class: Alfa bloker
-  brands: [Cardura]
-
-# ------------------------------------------------------------------ Lipid
-- generic: atorvastatin
-  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
-  brands: [Lipitor, Ator]
-- generic: rosuvastatin
-  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
-  brands: [Crestor]
-- generic: simvastatin
-  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
-  brands: [Zocor]
-- generic: ezetimibe
-  display: Ezetimib
-  pharm_class: Kolesterol emilim inhibitörü
-  brands: [Ezetrol]
-- generic: ezetimibe + atorvastatin
-  display: Ezetimib + Atorvastatin
-  pharm_class: Kolesterol emilim inhibitörü + statin
-  brands: [Atozet]
-- generic: fenofibrate
-  display: Fenofibrat
-  pharm_class: Fibrat
-  brands: [Lipanthyl]
-
-# ------------------------------------------------------------------ Antiagregan / antikoagülan
+# ------------------------------------------------------------------ B01 — Antitrombotikler (antiagregan / antikoagülan)
+- generic: abciximab
+  display: Absiksimab
+  pharm_class: Antiagregan
+  atc: [B01AC13]
+  products: 1
+  brands: [Clotinab]
+- generic: alteplase
+  display: Alteplaz
+  pharm_class: Trombolitik (enzim)
+  atc: [B01AD02]
+  products: 3
+  brands: [Actilyse]
+- generic: antithrombin iii
+  display: Antitrombin III
+  pharm_class: Antikoagülan (heparin grubu)
+  atc: [B01AB02]
+  products: 2
+  brands: [Anbinex]
+- generic: apixaban
+  display: Apiksaban
+  pharm_class: Antikoagülan (faktör Xa inhibitörü)
+  atc: [B01AF02]
+  products: 72
+  brands: [Eliquis, Apaclot, Apelto, Apivora, Apixelis, Apixenta, Atenic, Elixaban, Equtraban, Olpixa, Paxiban, Tromboxar, Vaxivo, Xaprev, Zavionyx]
+- generic: argatroban
+  pharm_class: Antikoagülan (doğrudan trombin inhibitörü)
+  atc: [B01AE03]
+  products: 1
+  brands: [Argazem]
 - generic: aspirin
   display: Asetilsalisilik asit (aspirin)
   aliases: [Asetilsalisilik asit, ASA]
   pharm_class: Antiagregan
-  brands: [Coraspin, Ecopirin]
+  atc: [B01AC06]
+  products: 29
+  brands: [Coraspin, Ecopirin, Asinpirine, Ataspin, Dispril, Ecopirin Pro, Enkaprin, Paso, Pharmaspirin]
+- generic: bemiparin
+  pharm_class: Antikoagülan (heparin grubu)
+  atc: [B01AB12]
+  products: 6
+  brands: [Hibor]
+- generic: bivalirudin
+  pharm_class: Antikoagülan (doğrudan trombin inhibitörü)
+  atc: [B01AE06]
+  products: 3
+  brands: [Bivacard, Obivadin]
+- generic: cangrelor
+  display: Kangrelor
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  atc: [B01AC25]
+  products: 2
+  brands: [Kengrexal]
+- generic: caplacizumab
+  display: Kaplasizumab
+  pharm_class: Diğer antitrombotik
+  atc: [B01AX07]
+  products: 2
+  brands: [Cablivi]
+- generic: cilostazol
+  display: Silostazol
+  pharm_class: Antiagregan
+  atc: [B01AC23]
+  products: 8
+  brands: [Pletal, Silnorm, Strovex]
 - generic: clopidogrel
   display: Klopidogrel
   pharm_class: Antiagregan (P2Y12 inhibitörü)
-  brands: [Plavix]
-- generic: ticagrelor
-  display: Tikagrelor
-  pharm_class: Antiagregan (P2Y12 inhibitörü)
-  brands: [Brilinta]
-- generic: prasugrel
-  pharm_class: Antiagregan (P2Y12 inhibitörü)
-  brands: [Effient]
-- generic: warfarin
-  pharm_class: Antikoagülan (K vitamini antagonisti)
-  brands: [Coumadin]
-- generic: rivaroxaban
-  display: Rivaroksaban
-  pharm_class: Antikoagülan (faktör Xa inhibitörü)
-  brands: [Xarelto]
-- generic: apixaban
-  display: Apiksaban
-  pharm_class: Antikoagülan (faktör Xa inhibitörü)
-  brands: [Eliquis]
+  atc: [B01AC04]
+  products: 33
+  brands: [Plavix, As-Clodip, Atervix, Cardogrel, Clogan, Cloperol, Clopitro, Clopra, Diloxol, Diporel, Karum, Klogel, Lopigrol, Opirel, Pingel, Planor, Plavidol, Ploveks]
 - generic: dabigatran
   pharm_class: Antikoagülan (doğrudan trombin inhibitörü)
+  atc: [B01AE07]
+  products: 5
   brands: [Pradaxa]
+- generic: dipyridamole
+  display: Dipiridamol
+  pharm_class: Antiagregan
+  atc: [B01AC07]
+  products: 6
+  brands: [Drisentin, Tromboliz, Vazodil]
 - generic: edoxaban
   display: Edoksaban
   pharm_class: Antikoagülan (faktör Xa inhibitörü)
-  brands: [Lixiana]
+  atc: [B01AF03]
+  products: 6
+  brands: [Lixiana, Edoxtra]
+- generic: enoxaparin
+  display: Enoksaparin
+  pharm_class: Antikoagülan (heparin grubu)
+  atc: [B01AB05]
+  products: 34
+  brands: [Axeparin, Clexane, Crusia, Enox, Oksapar, Venaperta]
+- generic: epoprostenol
+  pharm_class: Antiagregan
+  atc: [B01AC09]
+  products: 5
+  brands: [Estenol, Solsitar, Veletri]
+- generic: eptifibatide
+  display: Eptifibatid
+  pharm_class: Antiagregan
+  atc: [B01AC16]
+  products: 2
+  brands: [Epticard]
+- generic: fondaparinux
+  display: Fondaparinuks
+  pharm_class: Diğer antitrombotik
+  atc: [B01AX05]
+  products: 7
+  brands: [Arixtra]
+- generic: heparin
+  pharm_class: Antikoagülan (heparin grubu)
+  atc: [B01AB01]
+  products: 14
+  brands: [Biemparin, Faxipar, Heparinum, Heparx, Hexarin, Koparin, Nevparin, Poliparin, Seloparin, Tromparin, Vasparin]
+- generic: iloprost
+  display: İloprost
+  pharm_class: Antiagregan
+  atc: [B01AC11]
+  products: 16
+  brands: [Divodin, Ilomedin, Ilopera, Ilotemol, Ilovent, Pulmolin, Vebulis, Ventavis, Visovent]
+- generic: prasugrel
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  atc: [B01AC22]
+  products: 2
+  brands: [Effient, Sugvida]
+- generic: protein c
+  display: İnsan protein C
+  pharm_class: Trombolitik (enzim)
+  atc: [B01AD12]
+  products: 1
+  brands: [Ceprotin]
+- generic: reteplase
+  display: Reteplaz
+  pharm_class: Trombolitik (enzim)
+  atc: [B01AD07]
+  products: 1
+  brands: [Rapilysin]
+- generic: rivaroxaban
+  display: Rivaroksaban
+  pharm_class: Antikoagülan (faktör Xa inhibitörü)
+  atc: [B01AF01]
+  products: 50
+  brands: [Xarelto, Onaxan, Rivelto, Rivoksar, Tromaban, Venmix, Venomia, Vorelban, Voxaban, Xaroks]
+- generic: selexipag
+  display: Seleksipag
+  pharm_class: Antiagregan
+  atc: [B01AC27]
+  products: 27
+  brands: [Selegri, Selpenza, Uptravi]
+- generic: sulodexide
+  display: Sulodeksid
+  pharm_class: Antikoagülan (heparin grubu)
+  atc: [B01AB11]
+  products: 2
+  brands: [Anjioflux]
+- generic: tenecteplase
+  display: Tenekteplaz
+  pharm_class: Trombolitik (enzim)
+  atc: [B01AD11]
+  products: 1
+  brands: [Metalyse]
+- generic: ticagrelor
+  display: Tikagrelor
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  atc: [B01AC24]
+  products: 21
+  brands: [Brilinta, Agrilor, Camilla, Talderol, Ticasa, Tigrelo, Tilanta, Tixalor]
+- generic: ticlopidine
+  display: Tiklopidin
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  atc: [B01AC05]
+  products: 1
+  brands: [Ticlocard]
+- generic: tirofiban
+  pharm_class: Antiagregan
+  atc: [B01AC17]
+  products: 12
+  brands: [Agraban, Agrabloc, Agrasel, Agredur Ready, Multiflex Tirosel, Rofistat, Tirobif, Tiroprest, Tirostu, Tiroxan, Trombostat]
+- generic: treprostinil
+  pharm_class: Antiagregan
+  atc: [B01AC21]
+  products: 9
+  brands: [Genprostin, Trepiva, Trepoks, Trepulor]
+- generic: warfarin
+  display: Varfarin
+  aliases: [Coumadin]
+  pharm_class: Antikoagülan (K vitamini antagonisti)
+  atc: [B01AA03]
+  products: 7
+  brands: [Plasorin, Warfmadin, Warsu]
+- generic: "aspirin + clopidogrel"
+  display: "Asetilsalisilik asit (aspirin) + Klopidogrel"
+  pharm_class: Antiagregan kombinasyonu
+  atc: [B01AC30]
+  products: 4
+  brands: [Klogel-A]
+
+# ------------------------------------------------------------------ C02 — Antihipertansifler
+- generic: ambrisentan
+  pharm_class: Diğer antihipertansif (pulmoner hipertansiyon)
+  atc: [C02KX02]
+  products: 12
+  brands: [Ancatis, Volibris, Volimra]
+- generic: bosentan
+  pharm_class: Diğer antihipertansif (pulmoner hipertansiyon)
+  atc: [C02KX01]
+  products: 14
+  brands: [Diamond, Prindan, Tracleer, Tractan]
+- generic: doxazosin
+  display: Doksazosin
+  pharm_class: Alfa bloker
+  atc: [C02CA04]
+  products: 16
+  brands: [Cardura, Cardura XL, Doksura, Kardozin, Tendura]
+- generic: guanfacine
+  display: Guanfasin
+  pharm_class: Santral etkili antiadrenerjik
+  atc: [C02AC02]
+  products: 14
+  brands: [Arislow ER, Guago]
+- generic: macitentan
+  display: Masitentan
+  pharm_class: Diğer antihipertansif (pulmoner hipertansiyon)
+  atc: [C02KX04]
+  products: 10
+  brands: [Brespa, Fulmorex, Macitrin, Masilva, Masipah, Masitera, Opsentan, Opsumit, Phealera, Pulhip]
+- generic: methyldopa
+  display: Metildopa
+  pharm_class: Santral etkili antiadrenerjik
+  atc: [C02AB01]
+  products: 1
+  brands: [Alfamet]
+- generic: moxonidine
+  display: Moksonidin
+  pharm_class: Santral etkili antiadrenerjik
+  atc: [C02AC05]
+  products: 8
+  brands: [Moxelva, Physiotens]
+- generic: nitroprusside
+  display: Sodyum nitroprusid
+  pharm_class: Arteriyolar düz kas vazodilatörü
+  atc: [C02DD01]
+  products: 1
+  brands: [Nipruss]
+- generic: rilmenidine
+  display: Rilmenidin
+  pharm_class: Santral etkili antiadrenerjik
+  atc: [C02AC06]
+  products: 1
+  brands: [Hyperium]
+- generic: riociguat
+  display: Riosiguat
+  pharm_class: Diğer antihipertansif (pulmoner hipertansiyon)
+  atc: [C02KX05]
+  products: 30
+  brands: [Adempas, Duopheal, Rionera]
+- generic: urapidil
+  pharm_class: Periferik etkili antiadrenerjik (alfa bloker)
+  atc: [C02CA06]
+  products: 5
+  brands: [Ebrasel, Pidilax, Upadil]
+- generic: "chlorthalidone + reserpine"
+  display: "Klortalidon + Rezerpin"
+  pharm_class: "Antihipertansif + diüretik"
+  atc: [C02LA01]
+  products: 4
+  brands: [Hypertens, Regroton]
+- generic: "macitentan + tadalafil"
+  display: "Masitentan + Tadalafil"
+  pharm_class: Diğer antihipertansif (pulmoner hipertansiyon)
+  atc: [C02KX54]
+  products: 1
+  brands: [Opsynvi]
+
+# ------------------------------------------------------------------ C03 — Diüretikler
+- generic: amiloride
+  display: Amilorid
+  pharm_class: Potasyum tutucu diüretik
+  atc: [C03DB01]
+  products: 5
+  brands: [Kalurid]
+- generic: eplerenone
+  display: Eplerenon
+  pharm_class: Aldosteron antagonisti (potasyum tutucu diüretik)
+  atc: [C03DA04]
+  products: 8
+  brands: [Epleday, Inspra]
+- generic: finerenone
+  display: Finerenon
+  pharm_class: Aldosteron antagonisti (potasyum tutucu diüretik)
+  atc: [C03DA05]
+  products: 4
+  brands: [Kerendia]
+- generic: furosemide
+  display: Furosemid
+  pharm_class: Kıvrım (loop) diüretiği
+  atc: [C03CA01]
+  products: 36
+  brands: [Lasix, Avisemid, Desal, Furoject, Furomex, Furomid, Furoson, Furotab, Karsemid, Lasemid, Lizik, Medisal, Turktipsan Furosemid, Uradex, Urever, Urinat]
+- generic: indapamide
+  display: İndapamid
+  pharm_class: Tiyazid benzeri diüretik
+  atc: [C03BA11]
+  products: 23
+  brands: [Fludex, Darzox SR, Flubest, Flubest SR, Fludex SR, Fludin, Flupamid, Flutans, Indaday, Indapen, Indurin, Indurin SR]
+- generic: spironolactone
+  display: Spironolakton
+  pharm_class: Aldosteron antagonisti (potasyum tutucu diüretik)
+  atc: [C03DA01]
+  products: 13
+  brands: [Aldactone, Aldactone-A, Dalylacton, Ridakton, Spylacton]
+- generic: tolvaptan
+  pharm_class: Vazopressin antagonisti
+  atc: [C03XA01]
+  products: 20
+  brands: [Jidren, Jinarc, Samsca, Tolvadi]
+- generic: torsemide
+  display: Torasemid
+  pharm_class: Kıvrım (loop) diüretiği
+  atc: [C03CA04]
+  products: 16
+  brands: [Sutril Neo, Torventa]
+- generic: "amiloride + hydrochlorothiazide"
+  display: "Amilorid + Hidroklorotiyazid"
+  pharm_class: "Diüretik + potasyum tutucu diüretik"
+  atc: [C03EA01]
+  products: 2
+  brands: [Amilazid]
+- generic: "furosemide + spironolactone"
+  display: "Furosemid + Spironolakton"
+  pharm_class: "Diüretik + potasyum tutucu diüretik"
+  atc: [C03EB01]
+  products: 6
+  brands: [Semitone]
+- generic: "hydrochlorothiazide + spironolactone"
+  display: "Hidroklorotiyazid + Spironolakton"
+  pharm_class: "Diüretik + potasyum tutucu diüretik"
+  atc: [C03EA01]
+  products: 10
+  brands: [Aktazid, Aldactazide]
+- generic: "hydrochlorothiazide + triamterene"
+  display: "Hidroklorotiyazid + Triamteren"
+  pharm_class: "Diüretik + potasyum tutucu diüretik"
+  atc: [C03EA01]
+  products: 3
+  brands: [Trianseril]
+
+# ------------------------------------------------------------------ C07 — Beta blokerler
+- generic: atenolol
+  pharm_class: Beta bloker
+  atc: [C07AB03]
+  products: 4
+  brands: [Tensinor, As-Atens]
+- generic: bisoprolol
+  pharm_class: Beta bloker
+  atc: [C07AB07]
+  products: 11
+  brands: [Concor, Kardoritm, Kenoden, Rizoprol]
+- generic: carvedilol
+  display: Karvedilol
+  pharm_class: "Alfa/beta bloker"
+  atc: [C07AG02]
+  products: 33
+  brands: [Dilatrend, Arlec, Calbicor, Carvexal, Coronis, Delotran, Kinetra, Velzapin]
+- generic: esmolol
+  pharm_class: Beta bloker
+  atc: [C07AB09]
+  products: 12
+  brands: [Brevibloc, Brevibloc Premiks, Esmobloc, Esmorate, Kardoes Premix, Multiflex Ermoloc Premiks, Turktipsan Esmolol]
+- generic: labetalol
+  pharm_class: "Alfa/beta bloker"
+  atc: [C07AG01]
+  products: 1
+  brands: [Lablol]
+- generic: metoprolol
+  pharm_class: Beta bloker
+  atc: [C07AB02]
+  products: 44
+  brands: [Beloc, Beloc Zok, Altobio Metoprolol, Beloc Durules, Betablok Sdk, Betablok SR, Cardovol, Corcuratio, Mecorlong, Mepolex, Metloc, Mevopal, Normolol, Problok, Saneloc]
+- generic: nebivolol
+  pharm_class: Beta bloker
+  atc: [C07AB12]
+  products: 37
+  brands: [Vasoxen, Bloxer, Cromtol, Nebiworld, Nevimol, Nevol, Nexivol, Valende, Vascura]
+- generic: propranolol
+  pharm_class: Beta bloker
+  atc: [C07AA05]
+  products: 3
+  brands: [Dideral, Hemangiol]
+- generic: s-metoprolol
+  pharm_class: Beta bloker
+  atc: [C07AB02]
+  products: 6
+  brands: [Opemol XR]
+- generic: sotalol
+  pharm_class: Beta bloker
+  atc: [C07AA07]
+  products: 4
+  brands: [Darob, Talozin]
+- generic: timolol
+  pharm_class: Beta bloker
+  atc: [C07AA06]
+  products: 1
+  brands: [Timosol]
+- generic: "amlodipine + nebivolol"
+  display: "Amlodipin + Nebivolol"
+  pharm_class: "Beta bloker + diğer antihipertansif"
+  atc: [C07FB12]
+  products: 12
+  brands: [Amloneb]
+- generic: "atenolol + chlorthalidone"
+  display: "Atenolol + Klortalidon"
+  pharm_class: "Beta bloker + tiyazid"
+  atc: [C07BB03]
+  products: 2
+  brands: [Tenoretic]
+- generic: "bisoprolol + hydrochlorothiazide"
+  display: "Bisoprolol + Hidroklorotiyazid"
+  aliases: [Concor Plus]
+  pharm_class: "Beta bloker + diüretik"
+  atc: [C07BB07]
+  products: 3
+  brands: [Kardoritm Plus, Lodoz]
+- generic: "hydrochlorothiazide + nebivolol"
+  display: "Hidroklorotiyazid + Nebivolol"
+  pharm_class: "Beta bloker + tiyazid"
+  atc: [C07BB12]
+  products: 8
+  brands: [Nevimol Plus, Vasoxen Plus]
+- generic: "levamlodipine + nebivolol"
+  display: "S-amlodipin (levamlodipin) + Nebivolol"
+  pharm_class: "Beta bloker + diğer antihipertansif"
+  atc: [C07FB12]
+  products: 2
+  brands: [Nordip]
+- generic: "amlodipine + hydrochlorothiazide + nebivolol"
+  display: "Amlodipin + Hidroklorotiyazid + Nebivolol"
+  pharm_class: "Beta bloker + tiyazid"
+  atc: [C07B]
+  products: 4
+  brands: [Vasday]
+
+# ------------------------------------------------------------------ C08 — Kalsiyum kanal blokerleri
+- generic: amlodipine
+  display: Amlodipin
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08CA01]
+  products: 105
+  brands: [Norvasc, Amlodis, Amlohex, Amlokard, Amlovas, As-Amlo, Carblok, Carlopin, Dilopin, Fixodip, Monovas, Nipidol, Norlopin, Normopres, Norpine, Penvasc, Tamlopin, Vasocard, Vasonorm, Vazkor]
+- generic: benidipine
+  display: Benidipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA15]
+  products: 9
+  brands: [Benipin, Benitide, Cardivex, Coniel, Zedipin]
+- generic: diltiazem
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08DB01]
+  products: 28
+  brands: [Diltizem, Altizem SR, Altizem-SR, Dilkor SR, Diltizem-L, Kartiazem, Pectazem, Progor, Tiacard]
+- generic: felodipine
+  display: Felodipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA02]
+  products: 2
+  brands: [Plendil]
+- generic: lacidipine
+  display: Lasidipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA09]
+  products: 2
+  brands: [Lacipil]
+- generic: lercanidipine
+  display: Lerkanidipin
+  aliases: [Zanidip]
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08CA13]
+  products: 8
+  brands: [Lamart, Lercadip, Lercix, Lernipin]
+- generic: levamlodipine
+  display: S-amlodipin (levamlodipin)
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA01]
+  products: 10
+  brands: [Amlofull, S-Nor]
+- generic: lidoflazine
+  display: Lidoflazin
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08EX01]
+  products: 3
+  brands: [Noblazin]
+- generic: manidipine
+  display: Manidipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA11]
+  products: 1
+  brands: [Iperten]
+- generic: nicardipine
+  display: Nikardipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA04]
+  products: 5
+  brands: [Nicarflex Premiks, Ninax]
+- generic: nifedipine
+  display: Nifedipin
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08CA05]
+  products: 5
+  brands: [Adalat Crono, Nidicard]
+- generic: nimodipine
+  display: Nimodipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA06]
+  products: 2
+  brands: [Nimotop]
+- generic: nitrendipine
+  display: Nitrendipin
+  pharm_class: Kalsiyum kanal blokeri (dihidropiridin)
+  atc: [C08CA08]
+  products: 1
+  brands: [Nitrensin]
+- generic: verapamil
+  pharm_class: Kalsiyum kanal blokeri
+  atc: [C08DA01]
+  products: 12
+  brands: [Isoptin, Fibrocard L.p, Isopamil, Isoptin Kkh, Isoptin SR, Ormil]
+- generic: "amlodipine + indapamide"
+  display: "Amlodipin + İndapamid"
+  pharm_class: "Kalsiyum kanal blokeri + diüretik"
+  atc: [C08GA02]
+  products: 2
+  brands: [Natrixam]
+
+# ------------------------------------------------------------------ C09 — Renin-anjiyotensin sistemi
+- generic: azilsartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA09]
+  products: 2
+  brands: [Azedok]
+- generic: benazepril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA07]
+  products: 1
+  brands: [Cibacen]
+- generic: candesartan
+  display: Kandesartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA06]
+  products: 57
+  brands: [Atacand, Ayra, Candecard, Candenact, Candexil, Cantab, Larmoni, Tensart, Ucand]
+- generic: captopril
+  display: Kaptopril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA01]
+  products: 9
+  brands: [Kapril, Kaptoril, Nobepril]
+- generic: cilazapril
+  display: Silazapril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA08]
+  products: 6
+  brands: [Inhibace, Aceprix]
+- generic: enalapril
+  aliases: [Renitec]
+  pharm_class: ACE inhibitörü
+  atc: [C09AA02]
+  products: 16
+  brands: [Konveril, Enapress, Enapril, Ketansif]
+- generic: eprosartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA02]
+  products: 1
+  brands: [Teveten]
+- generic: fosinopril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA09]
+  products: 4
+  brands: [Acefor, Monopril]
+- generic: imidapril
+  display: İmidapril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA16]
+  products: 9
+  brands: [Tanatril]
+- generic: irbesartan
+  display: İrbesartan
+  aliases: [Aprovel]
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA04]
+  products: 43
+  brands: [Karvea, Antrovel, Arbesta, Hirbes, Irbecor, Irda, Irprestan, Onesart, Rebevea, Rotazar, Sanbartan]
+- generic: lisinopril
+  aliases: [Zestril]
+  pharm_class: ACE inhibitörü
+  atc: [C09AA03]
+  products: 12
+  brands: [April-Ace, Rilace, Sinopryl, Tanstop]
+- generic: losartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA01]
+  products: 25
+  brands: [Cozaar, Eklips, Hilos, Hilos Fort, Lorkar, Losartil, Losaryum, Loxibin, Sarilen]
+- generic: moexipril
+  display: Moeksipril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA13]
+  products: 2
+  brands: [Univasc]
+- generic: olmesartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA08]
+  products: 56
+  brands: [Olmetec, Calenda, Defansar, Hipersar, Olgen, Olmeday, Olmysar, Olsart, Ometan, Osartec]
+- generic: perindopril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA04]
+  products: 21
+  brands: [Coversyl, Aceper, Padero, Periday, Perpril, Raten, Serperil]
+- generic: ramipril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA05]
+  products: 25
+  brands: [Delix, Corvix, Delix Protect, Dicef, Genprixa, Race, Rapalix, Revil, Revil Protect, Sandace]
+- generic: telmisartan
+  aliases: [Pritor]
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA07]
+  products: 22
+  brands: [Micardis, Micator, Qualtan, Telmitek, Telvis, Telzap, Uloxetic]
+- generic: trandolapril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA10]
+  products: 3
+  brands: [Gopten, Gopten Forte]
+- generic: valsartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  atc: [C09CA03]
+  products: 57
+  brands: [Diovan, Cardopan, Ceracard, Hixar, Limiten, Premium, Tamgard, Valcor, Valso, Valtensin, Viasart, Wansaar]
+- generic: zofenopril
+  pharm_class: ACE inhibitörü
+  atc: [C09AA15]
+  products: 5
+  brands: [Zoprotec]
+- generic: "amlodipine + candesartan"
+  display: "Amlodipin + Kandesartan"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB07]
+  products: 13
+  brands: [Canlox, Rantazin, Tansifa]
+- generic: "amlodipine + irbesartan"
+  display: "Amlodipin + İrbesartan"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB05]
+  products: 11
+  brands: [Irdapin, Karvea Duo, Norvasc Duo]
+- generic: "amlodipine + lisinopril"
+  display: "Amlodipin + Lisinopril"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB03]
+  products: 4
+  brands: [Amlipin]
+- generic: "amlodipine + olmesartan"
+  display: "Olmesartan + Amlodipin"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB02]
+  products: 22
+  brands: [Sevikar, Arpedon, Excaliba, Olmecomb, Olmysar Combo]
+- generic: "amlodipine + perindopril"
+  display: "Perindopril + Amlodipin"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB04]
+  products: 23
+  brands: [Coveram, Amloper, Peram, Perilopin]
+- generic: "amlodipine + ramipril"
+  display: "Amlodipin + Ramipril"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB07]
+  products: 4
+  brands: [Delix Forte]
+- generic: "amlodipine + telmisartan"
+  display: "Amlodipin + Telmisartan"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB04]
+  products: 4
+  brands: [Telmodip, Twynsta]
+- generic: "amlodipine + valsartan"
+  display: "Valsartan + Amlodipin"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB01]
+  products: 22
+  brands: [Exforge, Cardofix, Cenart, Combisar, Sub-Zero, Valcodin, Valdipin, Valtan-A]
+- generic: "azilsartan + chlorthalidone"
+  display: "Azilsartan + Klortalidon"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA09]
+  products: 1
+  brands: [Azedok Plus]
+- generic: "benazepril + hydrochlorothiazide"
+  display: "Benazepril + Hidroklorotiyazid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA07]
+  products: 2
+  brands: [Cibadrex]
+- generic: "bisoprolol + perindopril"
+  pharm_class: ACE inhibitörü kombinasyonu
+  atc: [C09BX02]
+  products: 4
+  brands: [Cosimprel]
+- generic: "candesartan + hydrochlorothiazide"
+  display: "Kandesartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA06]
+  products: 29
+  brands: [Atacand Plus, Ayra Plus, Candecard Plus, Candenact Plus, Candexil Plus, Cansar Plus, Cantab Plus, Co-Ucand, Larmoni Plus, Tensart Plus]
+- generic: "chlorthalidone + valsartan"
+  display: "Klortalidon + Valsartan"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA03]
+  products: 5
+  brands: [Valtalid Plus]
+- generic: "cilazapril + hydrochlorothiazide"
+  display: "Silazapril + Hidroklorotiyazid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA08]
+  products: 2
+  brands: [Aceprix Plus, Inhibace Plus]
+- generic: "enalapril + hydrochlorothiazide"
+  display: "Enalapril + Hidroklorotiyazid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA02]
+  products: 3
+  brands: [Enapril Plus, Konveril Plus]
+- generic: "enalapril + lercanidipine"
+  display: "Enalapril + Lerkanidipin"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB02]
+  products: 14
+  brands: [Tansiprex, Zalepril, Zanipress, Zanitek]
+- generic: "enalapril + nitrendipine"
+  display: "Enalapril + Nitrendipin"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB06]
+  products: 2
+  brands: [Eneas, Enit]
+- generic: "eprosartan + hydrochlorothiazide"
+  display: "Eprosartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA02]
+  products: 2
+  brands: [Teveten Plus]
+- generic: "fosinopril + hydrochlorothiazide"
+  display: "Fosinopril + Hidroklorotiyazid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA09]
+  products: 2
+  brands: [Monopril Plus]
+- generic: "hydrochlorothiazide + irbesartan"
+  display: "İrbesartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA04]
+  products: 54
+  brands: [Karvezide, Arbesta Plus, Co-Antrovel, Co-Irda, Hirbes Plus, Irbecor Plus, Irbeday Plus, Irprestan Plus, Onesart Plus, Rebevea Plus, Rotazar Plus, Sanbartan Plus]
+- generic: "hydrochlorothiazide + lisinopril"
+  display: "Hidroklorotiyazid + Lisinopril"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA03]
+  products: 4
+  brands: [Rilace Plus, Sinoretik, Sinoretik Fort]
+- generic: "hydrochlorothiazide + losartan"
+  display: "Losartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA01]
+  products: 32
+  brands: [Hyzaar, Co-Hilos, Co-Hilos Fort, Eklips Fort, Eklips Plus, Hysartar, Hyzaar Fort, Losanew Plus, Losapres Plus, Losartil Plus, Losaryum Plus, Lotans Plus, Loxibin Plus, Sarilen Plus, Sarvastan]
+- generic: "hydrochlorothiazide + moexipril"
+  display: "Hidroklorotiyazid + Moeksipril"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA13]
+  products: 2
+  brands: [Uniretic]
+- generic: "hydrochlorothiazide + olmesartan"
+  display: "Olmesartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA08]
+  products: 56
+  brands: [Olmetec Plus, Calenda Plus, Hipersar Plus, Olgen Plus, Olmeday Plus, Olmysar Plus, Olsart Plus, Ometan Plus]
+- generic: "hydrochlorothiazide + ramipril"
+  display: "Ramipril + Hidroklorotiyazid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA05]
+  products: 13
+  brands: [Delix Plus, Race Plus, Rapalix Plus, Revil Plus]
+- generic: "hydrochlorothiazide + telmisartan"
+  display: "Telmisartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA07]
+  products: 33
+  brands: [Micardis Plus, Prescan Plus, Telmiday Plus, Telmitek Plus, Telvis Plus, Tenvia Plus]
+- generic: "hydrochlorothiazide + valsartan"
+  display: "Valsartan + Hidroklorotiyazid"
+  pharm_class: "ARB + diüretik"
+  atc: [C09DA03]
+  products: 99
+  brands: [Co-Diovan, Cardopan Plus, Ceracard Plus, Hixar Plus, Limiten Plus, Premium Plus, Valcor Plus, Valso Plus, Valtan Plus, Valtensin Plus, Wansaar Plus, Xsar Plus]
+- generic: "hydrochlorothiazide + zofenopril"
+  display: "Hidroklorotiyazid + Zofenopril"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA15]
+  products: 2
+  brands: [Zoprotec Plus]
+- generic: "indapamide + perindopril"
+  display: "Perindopril + İndapamid"
+  pharm_class: "ACE inhibitörü + diüretik"
+  atc: [C09BA04]
+  products: 21
+  brands: [Coversyl Plus, Aceper Plus, Padero Plus, Perdapax, Perduo, Periday Plus, Perivel Plus, Perpril Plus, Raten Plus, Serperil Plus]
+- generic: "levamlodipine + olmesartan"
+  display: "S-amlodipin (levamlodipin) + Olmesartan"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB02]
+  products: 4
+  brands: [Norday]
+- generic: "levamlodipine + telmisartan"
+  display: "S-amlodipin (levamlodipin) + Telmisartan"
+  pharm_class: "ARB + kalsiyum kanal blokeri"
+  atc: [C09DB04]
+  products: 4
+  brands: [Armipin]
+- generic: "sacubitril + valsartan"
+  display: "Sakubitril + Valsartan"
+  pharm_class: Anjiyotensin reseptör-neprilisin inhibitörü (ARNI)
+  atc: [C09DX04]
+  products: 12
+  brands: [Fradine, Neprilex, Oneptus, Ovefran]
+- generic: "trandolapril + verapamil"
+  pharm_class: "ACE inhibitörü + kalsiyum kanal blokeri"
+  atc: [C09BB10]
+  products: 6
+  brands: [Tarka, Tarka Forte, Veracomb MR, Verapin, Verapin Forte]
+- generic: "amlodipine + candesartan + hydrochlorothiazide"
+  display: "Amlodipin + Kandesartan + Hidroklorotiyazid"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX06]
+  products: 13
+  brands: [Canlox Plus, Rantazin Plus, Tansifa Plus]
+- generic: "amlodipine + hydrochlorothiazide + irbesartan"
+  display: "Amlodipin + Hidroklorotiyazid + İrbesartan"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX07]
+  products: 4
+  brands: [Irdapin Plus]
+- generic: "amlodipine + hydrochlorothiazide + olmesartan"
+  display: "Amlodipin + Hidroklorotiyazid + Olmesartan"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX03]
+  products: 38
+  brands: [Excaliba Plus, Olmecomb Plus, Olmysar Trio, Sevikar Plus]
+- generic: "amlodipine + hydrochlorothiazide + telmisartan"
+  display: "Amlodipin + Hidroklorotiyazid + Telmisartan"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX]
+  products: 6
+  brands: [Telmodip Plus]
+- generic: "amlodipine + hydrochlorothiazide + valsartan"
+  display: "Amlodipin + Hidroklorotiyazid + Valsartan"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX01]
+  products: 13
+  brands: [Cardofix Plus, Cenart Plus, Combisar Plus]
+- generic: "amlodipine + indapamide + perindopril"
+  display: "Amlodipin + İndapamid + Perindopril"
+  pharm_class: ACE inhibitörü kombinasyonu
+  atc: [C09BX01]
+  products: 13
+  brands: [Normotri, Normotri Fort, Perilopin Plus, Triplixam]
+- generic: "hydrochlorothiazide + levamlodipine + olmesartan"
+  display: "Hidroklorotiyazid + S-amlodipin (levamlodipin) + Olmesartan"
+  pharm_class: ARB kombinasyonu
+  atc: [C09DX03]
+  products: 6
+  brands: [Tricavol]
+
+# ------------------------------------------------------------------ C10 — Lipid düşürücüler
+- generic: atorvastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA05]
+  products: 125
+  brands: [Lipitor, Ator, Alvastin, Amvastan, As-Atoks, Ateroz, Avitorel, Azimbra, Cardyn, Cholvast, Colastin-L, Divator, Lipidra, Lipitaksin, Lipsum, Saphire, Tarden, Torvaxal]
+- generic: colesevelam
+  display: Kolesevelam
+  pharm_class: Safra asidi bağlayıcı
+  atc: [C10AC04]
+  products: 16
+  brands: [Kovel, Sartol, Sevexir, Zenum]
+- generic: evolocumab
+  display: Evolokumab
+  pharm_class: PCSK9 inhibitörü
+  atc: [C10AX13]
+  products: 4
+  brands: [Repatha]
+- generic: ezetimibe
+  display: Ezetimib
+  pharm_class: Kolesterol emilim inhibitörü
+  atc: [C10AX09]
+  products: 7
+  brands: [Ezetrol, Colebyn, Ezelipin, Ezetec, Kolez]
+- generic: fenofibrate
+  display: Fenofibrat
+  pharm_class: Fibrat
+  atc: [C10AB05]
+  products: 22
+  brands: [Lipanthyl, Arfelip, Fenogal, Fepatil, Lipefra, Liphonis, Lipocard, Lipofen SR, Secalip SR]
+- generic: fenofibric acid
+  display: Fenofibrik asit
+  pharm_class: Fibrat
+  atc: [C10AB11]
+  products: 4
+  brands: [Lipaxel DR]
+- generic: gemfibrozil
+  pharm_class: Fibrat
+  atc: [C10AB04]
+  products: 2
+  brands: [Lopid]
+- generic: icosapent ethyl
+  display: İkosapent etil
+  pharm_class: Diğer lipid düşürücü
+  atc: [C10AX06]
+  products: 2
+  brands: [Ivaspent]
+- generic: inclisiran
+  display: İnklisiran
+  pharm_class: PCSK9 siRNA
+  atc: [C10AX16]
+  products: 1
+  brands: [Lyptimzia]
+- generic: lovastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA02]
+  products: 2
+  brands: [Lovastin]
+- generic: niacin
+  display: Niasin
+  pharm_class: Nikotinik asit türevi
+  atc: [C10AD02]
+  products: 6
+  brands: [Niascor]
+- generic: pitavastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA08]
+  products: 21
+  brands: [Alipza, Pitamin, Pitas, Pratin]
+- generic: pravastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA03]
+  products: 35
+  brands: [Pavas, Pravachol, Uprast]
+- generic: pyridinol carbamate
+  display: Piridinol karbamat
+  pharm_class: Lipid düşürücü
+  atc: [C10A]
+  products: 3
+  brands: [Colesterinex]
+- generic: rosuvastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA07]
+  products: 177
+  brands: [Crestor, Colefix, Colnar, Crelix, Genvotrin, Kolros, Livercol, Nolip, Reakt, Ronap, Rosact, Rosava, Rosucor, Rosufix, Rosugen, Rosustar, Rosuvas, Sanrose, Stage, Stata, Ultrox]
+- generic: simvastatin
+  aliases: [Zocor]
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  atc: [C10AA01]
+  products: 8
+  brands: [Lipvakol, Simta]
+- generic: "amlodipine + atorvastatin"
+  display: "Amlodipin + Atorvastatin"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX03]
+  products: 12
+  brands: [Atodip, Caduet]
+- generic: "amlodipine + rosuvastatin"
+  display: "Amlodipin + Rosuvastatin"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX09]
+  products: 24
+  brands: [Loditen, Rosucor Plus]
+- generic: "aspirin + atorvastatin"
+  display: "Asetilsalisilik asit (aspirin) + Atorvastatin"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX08]
+  products: 8
+  brands: [Atopir]
+- generic: "aspirin + rosuvastatin"
+  display: "Asetilsalisilik asit (aspirin) + Rosuvastatin"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX05]
+  products: 18
+  brands: [Aselip, Rospirin, Rosupirin]
+- generic: "atorvastatin + ezetimibe"
+  display: "Ezetimib + Atorvastatin"
+  aliases: [Atozet]
+  pharm_class: "Kolesterol emilim inhibitörü + statin"
+  atc: [C10BA05]
+  products: 13
+  brands: [Ezetec Plus, Fixlip, Tratez]
+- generic: "atorvastatin + levamlodipine"
+  display: "Atorvastatin + S-amlodipin (levamlodipin)"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX03]
+  products: 8
+  brands: [Arotin]
+- generic: "ezetimibe + rosuvastatin"
+  display: "Ezetimib + Rosuvastatin"
+  pharm_class: "Statin + diğer lipid düşürücü"
+  atc: [C10BA06]
+  products: 24
+  brands: [Ezeros, Rosalin, Rosimib]
+- generic: "ezetimibe + simvastatin"
+  display: "Ezetimib + Simvastatin"
+  pharm_class: "Statin + diğer lipid düşürücü"
+  atc: [C10BA02]
+  products: 8
+  brands: [Ezesim]
+- generic: "levamlodipine + rosuvastatin"
+  display: "S-amlodipin (levamlodipin) + Rosuvastatin"
+  pharm_class: "Statin + diğer ilaç"
+  atc: [C10BX09]
+  products: 10
+  brands: [Retilcomb]
+
+# ------------------------------------------------------------------ TİTCK listesinde tek başına ürünü olmayan kürate etken maddeler
+- generic: hydrochlorothiazide
+  display: Hidroklorotiyazid
+  pharm_class: Tiyazid diüretik
+  products: 0
+  brands: []
+- generic: "metformin + saxagliptin"
+  display: "Saksagliptin + Metformin"
+  aliases: [Kombiglyze XR]
+  pharm_class: "DPP-4 inhibitörü + biguanid"
+  products: 0
+  brands: []

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { headers } from "next/headers";
 import { Geist, Geist_Mono } from "next/font/google";
 import "./globals.css";
 import { ServiceWorkerRegister } from "@/components/push-toggle";
@@ -16,7 +17,12 @@ export const metadata: Metadata = {
 
 export const viewport: Viewport = { themeColor: "#0f766e", width: "device-width", initialScale: 1 };
 
-export default function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+export default async function RootLayout({ children }: Readonly<{ children: React.ReactNode }>) {
+  // Nonce tabanlı CSP (middleware.ts): nonce istek başına üretildiği için sayfalar dinamik render
+  // edilmelidir; statik ön-render edilmiş HTML'deki betiklerde nonce olmaz ve 'strict-dynamic' onları
+  // engeller. headers() okumak tüm ağacı dinamik yapar. Özel bir <Script> / satır içi betik eklenirse
+  // nonce şöyle okunup verilmelidir: const nonce = (await headers()).get("x-nonce"); <Script nonce={nonce} />.
+  await headers();
   return (
     <html lang="tr" className={`${geistSans.variable} ${geistMono.variable}`}>
       <body className="antialiased">

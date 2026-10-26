@@ -15,6 +15,21 @@ const nextConfig: NextConfig = {
     return [
       { source: "/:path*", headers: securityHeaders },
       {
+        // Sayfa CSP'si istek başına nonce ile middleware.ts'te kurulur. Middleware'in kapsamadığı
+        // yollar: /api (JSON/route handler) ve statik çevrimdışı sayfa — betik içermezler, sıkı sabit CSP.
+        source: "/api/:path*",
+        headers: [{ key: "Content-Security-Policy", value: "default-src 'none'; frame-ancestors 'none'" }],
+      },
+      {
+        source: "/offline.html",
+        headers: [
+          {
+            key: "Content-Security-Policy",
+            value: "default-src 'none'; style-src 'unsafe-inline'; img-src 'self'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'",
+          },
+        ],
+      },
+      {
         // Service worker her zaman tazeden indirilsin; güncellemeler gecikmesin.
         source: "/sw.js",
         headers: [

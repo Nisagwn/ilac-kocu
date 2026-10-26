@@ -7,7 +7,7 @@ Oluşturulan hesaplar (şifre: demo12345):
   + hekime atanmış 4 sentetik hasta (farklı uyum/risk profilleri; hekim panelini anlamlı kılmak için)
 
 Kürate eğitim içeriği (app/data/education.yaml) her çalıştırmada başlığa göre upsert edilir ve embed edilir.
-Kürate Türkçe ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada upsert edilir (çevrimdışı);
+TİTCK tabanlı Türkçe ilaç kataloğu (app/data/drug_catalog_tr.yaml) da her çalıştırmada upsert edilir (çevrimdışı);
 openFDA senkronu ayrı ve isteğe bağlıdır: python -m app.scripts.sync_drug_catalog
 """
 

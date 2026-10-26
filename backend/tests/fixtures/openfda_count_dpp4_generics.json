@@ -1,0 +1,43 @@
+{
+ "_kaynak": "Gerçek openFDA yanıtı (2026-10-26, api.fda.gov), testler için kısaltılmış kesit",
+ "request_url": "https://api.fda.gov/drug/label.json?search=openfda.pharm_class_epc%3A%22Dipeptidyl+Peptidase+4+Inhibitor+%5BEPC%5D%22&count=openfda.generic_name.exact&limit=1000",
+ "status": 200,
+ "body": {
+  "meta": {
+   "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+   "terms": "https://open.fda.gov/terms/",
+   "license": "https://open.fda.gov/license/",
+   "last_updated": "2026-10-23"
+  },
+  "results": [
+   {
+    "term": "SITAGLIPTIN AND METFORMIN HYDROCHLORIDE",
+    "count": 8
+   },
+   {
+    "term": "SITAGLIPTIN",
+    "count": 4
+   },
+   {
+    "term": "LINAGLIPTIN",
+    "count": 3
+   },
+   {
+    "term": "LINAGLIPTIN AND METFORMIN HYDROCHLORIDE",
+    "count": 3
+   },
+   {
+    "term": "EMPAGLIFLOZIN AND LINAGLIPTIN",
+    "count": 1
+   },
+   {
+    "term": "EMPAGLIFLOZIN, LINAGLIPTIN, METFORMIN HYDROCHLORIDE",
+    "count": 1
+   },
+   {
+    "term": "SITAGLIPTIN HYDROCHLORIDE ORAL",
+    "count": 1
+   }
+  ]
+ }
+}

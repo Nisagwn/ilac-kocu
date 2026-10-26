@@ -12,9 +12,15 @@
 //              (hasta@demo.local / hekim@demo.local; e-posta başına giriş sınırı nedeniyle yalnız duman testi)
 //   CLINICIANS yuk-hekim-01..M      PEAK_VUS en yüksek sanal hasta sayısı      DURATION tepe süresi (ör. 2m)
 //   LABEL      sonuç dosyası öneki (results/<LABEL>-summary.json)   THINK düşünme süresi çarpanı (vars. 1)
+//
+// Giriş: gateway modunda her sentetik hesap setup() içinde BİR KEZ giriş yapar (bcrypt yük ölçümünün dışında
+// kalır); sanal kullanıcılar bu token'ı kullanır. Token süresi dolmak üzereyse ya da 401 gelirse yalnız o VU
+// kendi başına yeniden giriş yapar (yenileme token'ı aynı hesabı paylaşan VU'lar arasında döndürülmez: iptal
+// edilmiş token'ın tekrar kullanımı tüm oturumları düşürürdü). web modunda çerezler VU başına olduğundan her VU
+// ilk iterasyonunda bir kez giriş yapar.
 import http from "k6/http";
 import { check, sleep } from "k6";
-import { Rate, Trend } from "k6/metrics";
+import { Counter, Rate, Trend } from "k6/metrics";
 
 const TARGET = __ENV.TARGET || "gateway";
 const BASE = __ENV.BASE_URL || (TARGET === "web" ? "http://nginx" : "http://nginx:8081");
@@ -41,6 +47,9 @@ const steps = {
   alerts: new Trend("step_alerts", true),
 };
 const rateLimited = new Rate("rate_limited_429");
+// istek/sn setup() girişleri hariç hesaplanır (aksi halde setup süresi oranı seyreltir)
+const scenarioReqs = new Counter("scenario_reqs");
+const setupMs = new Trend("setup_duration_ms");
 
 export const options = {
   scenarios: {
@@ -69,7 +78,8 @@ export const options = {
     "http_req_duration{kind:login}": ["p(95)<2000"],
     checks: ["rate>0.99"],
   },
-  summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max"],
+  summaryTrendStats: ["avg", "med", "p(90)", "p(95)", "p(99)", "max", "count"],
+  setupTimeout: "180s", // her hesap için bir bcrypt girişi
 };
 
 function parseDuration(d) {
@@ -94,7 +104,8 @@ function clinicianEmail() {
 
 // VU başına oturum (k6'da her VU ayrı JS ortamıdır; çerez kavanozu da VU başınadır).
 // gateway: Bearer erişim token'ı; web: Next.js'in httpOnly çerezleri (k6 kavanozu otomatik gönderir).
-const session = { loggedIn: false, token: null, patientId: null };
+const session = { loggedIn: false, token: null, patientId: null, expiresAt: 0, usedSetup: false };
+const RENEW_MARGIN_MS = 60 * 1000; // token bitmeden 1 dk önce yenilenir
 
 function authHeaders(extra) {
   const h = Object.assign({ "Content-Type": "application/json" }, extra || {});
@@ -102,7 +113,8 @@ function authHeaders(extra) {
   return h;
 }
 
-function login(email) {
+// Tek bir girişi yapar; başarılıysa { token, patientId, expiresAt } döner (web modunda token null).
+function doLogin(email) {
   let res;
   if (TARGET === "web") {
     res = http.post(`${BASE}/api/auth/login`, JSON.stringify({ email, password: PASSWORD }), {
@@ -116,19 +128,55 @@ function login(email) {
   }
   steps.login.add(res.timings.duration);
   rateLimited.add(res.status === 429);
-  if (!check(res, { "giriş 200": (r) => r.status === 200 })) return false;
-  if (TARGET !== "web") session.token = res.json("access_token");
-  const me = http.get(`${BASE}${PREFIX}/auth/me`, { headers: authHeaders(), tags: { kind: "api", name: "auth/me" } });
-  if (!check(me, { "me 200": (r) => r.status === 200 })) return false;
-  session.patientId = me.json("patient_id");
+  if (!check(res, { "giriş 200": (r) => r.status === 200 })) return null;
+  const token = TARGET !== "web" ? res.json("access_token") : null;
+  const expiresIn = TARGET !== "web" ? res.json("expires_in") || 900 : 900;
+  const headers = { "Content-Type": "application/json" };
+  if (token) headers.Authorization = `Bearer ${token}`;
+  const me = http.get(`${BASE}${PREFIX}/auth/me`, { headers, tags: { kind: "api", name: "auth/me" } });
+  if (!check(me, { "me 200": (r) => r.status === 200 })) return null;
+  return { token, patientId: me.json("patient_id"), expiresAt: Date.now() + expiresIn * 1000 };
+}
+
+function useSession(s) {
+  session.token = s.token;
+  session.patientId = s.patientId;
+  session.expiresAt = s.expiresAt;
   session.loggedIn = true;
+}
+
+function login(email) {
+  const s = doLogin(email);
+  if (!s) return false;
+  useSession(s);
   return true;
+}
+
+// gateway: her hesap için bir kez giriş, token'lar VU'lara dağıtılır (k6 setup() verisi her VU'ya kopyalanır)
+export function setup() {
+  if (TARGET === "web") return { sessions: {} };
+  const emails = [];
+  if (PATIENTS <= 0) {
+    emails.push("hasta@demo.local", "hekim@demo.local");
+  } else {
+    for (let i = 1; i <= PATIENTS; i++) emails.push(`yuk-hasta-${pad(i, 3)}@demo.local`);
+    for (let i = 1; i <= Math.max(1, CLINICIANS); i++) emails.push(`yuk-hekim-${pad(i, 2)}@demo.local`);
+  }
+  const t0 = Date.now();
+  const sessions = {};
+  for (const email of emails) {
+    const s = doLogin(email);
+    if (s) sessions[email] = s;
+  }
+  setupMs.add(Date.now() - t0);
+  return { sessions };
 }
 
 function api(method, path, body, name, extraHeaders) {
   const params = { headers: authHeaders(extraHeaders), tags: { kind: "api", name } };
   const url = `${BASE}${PREFIX}${path}`;
   const res = http.request(method, url, body === null ? null : JSON.stringify(body), params);
+  scenarioReqs.add(1);
   rateLimited.add(res.status === 429);
   if (res.status === 401) session.loggedIn = false; // oturum düştü → bir sonraki turda yeniden giriş
   return res;
@@ -141,12 +189,21 @@ function uuid() {
   });
 }
 
-function ensureLogin(email) {
-  return session.loggedIn || login(email);
+function ensureLogin(email, data) {
+  if (session.loggedIn && Date.now() < session.expiresAt - RENEW_MARGIN_MS) return true;
+  // İlk iterasyon: setup() token'ı (hâlâ geçerliyse) kullanılır; aksi halde bu VU kendisi giriş yapar
+  const pre = !session.usedSetup && data && data.sessions ? data.sessions[email] : null;
+  session.usedSetup = true; // 401/süre dolumu sonrası setup token'ına geri dönülmez
+  if (pre && Date.now() < pre.expiresAt - RENEW_MARGIN_MS) {
+    useSession(pre);
+    return true;
+  }
+  scenarioReqs.add(2); // giriş + /auth/me
+  return login(email);
 }
 
-export function patientFlow() {
-  if (!ensureLogin(patientEmail())) {
+export function patientFlow(data) {
+  if (!ensureLogin(patientEmail(), data)) {
     pause(5);
     return;
   }
@@ -181,8 +238,8 @@ export function patientFlow() {
   pause(Math.random() * 3 + 2);
 }
 
-export function clinicianFlow() {
-  if (!ensureLogin(clinicianEmail())) {
+export function clinicianFlow(data) {
+  if (!ensureLogin(clinicianEmail(), data)) {
     pause(5);
     return;
   }
@@ -218,6 +275,9 @@ export function handleSummary(data) {
   const apiDur = m["http_req_duration{kind:api}"];
   const failed = m.http_req_failed ? m.http_req_failed.values.rate : 0;
   const reqs = m.http_reqs ? m.http_reqs.values : { count: 0, rate: 0 };
+  const setupSec = m.setup_duration_ms ? m.setup_duration_ms.values.max / 1000 : 0;
+  const scenSec = data.state.testRunDurationMs / 1000 - setupSec;
+  const scenCount = m.scenario_reqs ? m.scenario_reqs.values.count : 0;
   const lim = m.rate_limited_429 ? m.rate_limited_429.values.rate : 0;
   const thr = Object.entries(m)
     .filter(([, v]) => v.thresholds)
@@ -225,7 +285,8 @@ export function handleSummary(data) {
   const lines = [
     "",
     `=== k6 özeti: ${LABEL} (hedef: ${TARGET}, tepe ${PEAK_VUS} sanal hasta + ${CLINICIANS} hekim) ===`,
-    `toplam istek: ${reqs.count}  (${reqs.rate.toFixed(1)} istek/sn)`,
+    `toplam istek: ${reqs.count}  (${reqs.rate.toFixed(1)} istek/sn)   giriş sayısı: ${m.step_login ? m.step_login.values.count : 0}`,
+    `senaryo: ${scenCount} istek / ${scenSec.toFixed(0)} sn = ${(scenSec > 0 ? scenCount / scenSec : 0).toFixed(1)} istek/sn (setup ${setupSec.toFixed(1)} sn hariç)`,
     `API p95 (LLM ve giriş hariç): ${apiDur ? ms(apiDur.values["p(95)"]) : "-"} ms   hata oranı: ${(failed * 100).toFixed(2)}%   429 oranı: ${(lim * 100).toFixed(2)}%`,
     "",
     ...rows.map((r) => r.map((c, i) => (i === 0 ? c.padEnd(22) : c.padStart(9))).join(" ")),

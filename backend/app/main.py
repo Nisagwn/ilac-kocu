@@ -1,6 +1,7 @@
 import logging
 from contextlib import asynccontextmanager
 
+import anyio.to_thread
 from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
@@ -42,6 +43,8 @@ async def lifespan(_: FastAPI):
     # worker ile koşabildiği için burada başlatılmaz (çift bildirim olur). Tek süreçli geliştirme için
     # RUN_SCHEDULER_IN_API=true. Her durumda REMINDERS_ENABLED ve VAPID anahtarları gerekir (testlerde asla).
     scheduler = start_scheduler(settings) if settings.run_scheduler_in_api else None
+    # İş parçacığı havuzu > eşzamanlı istek sınırı: bağlantı havuzu dolduğunda kilitlenme olmaz (app/config.py)
+    anyio.to_thread.current_default_thread_limiter().total_tokens = settings.threadpool_tokens
     yield
     if scheduler is not None:
         scheduler.shutdown(wait=False)

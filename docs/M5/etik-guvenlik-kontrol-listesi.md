@@ -40,7 +40,8 @@ Durum: ✅ karşılandı · ⚠️ kısmen / bilinen sınırlılık · ⏳ bekli
 | JWT httpOnly + SameSite=Lax (+ üretimde Secure) çerezde | ✅ | `frontend/src/app/api/auth/login/route.ts` |
 | Token tarayıcı JS'ine verilmez; aynı kökenli proxy | ✅ | `frontend/src/app/api/proxy/[...path]/route.ts`, `frontend/src/lib/api.ts` |
 | Service worker `/api/*` ve kişisel HTML'i önbelleğe almaz | ✅ | `frontend/public/sw.js` |
-| Güvenlik başlıkları | ✅ | `frontend/next.config.ts` |
+| Güvenlik başlıkları | ✅ | `infra/nginx/snippets/security-headers.conf` (Docker), `frontend/next.config.ts` (nginx'siz çalışmada) |
+| Nonce tabanlı CSP (`script-src`'de `'unsafe-inline'` yok) | ✅ | `frontend/src/middleware.ts`; `docs/M3/guvenlik-ve-pwa.md` §3.1 (curl + headless Chrome doğrulaması) |
 | Şifre hash (bcrypt), kısa ömürlü JWT (60 dk) | ✅ | `backend/app/security.py`, `.env.example` `JWT_EXPIRE_MINUTES` |
 | Sırlar repoda yok | ✅ | `.gitignore`, `.env.example` |
 | Guardrail olayları mesaj içeriği olmadan loglanır | ✅ | `coach_messages.guardrail_action` (eylem:kategori) |
