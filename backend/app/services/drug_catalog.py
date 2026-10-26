@@ -3,9 +3,10 @@
 Neden: openFDA yalnızca ABD etiketlerini içerir; hasta "Glifor" ya da rastgele bir metin yazınca bilgi
 gelmez. Katalog, ilaç adını serbest metin yerine doğrulanmış bir etken maddeye (generic) bağlar.
 
-- Kürate liste (app/data/drug_catalog_tr.yaml): TR ticari ad -> etken madde. Çevrimdışı çalışır;
-  `seed_catalog` ile tabloya upsert edilir (`python -m app.seed`). `resolve_generic` (openfda.py) de
-  bu listeden beslenir.
+- Türkçe liste (app/data/drug_catalog_tr.yaml): TR ticari ad -> etken madde. TİTCK "Ruhsatlı Beşeri Tıbbi
+  Ürünler Listesi"nden ATC filtresiyle üretilir (`python -m app.scripts.import_titck`, app/services/titck.py;
+  elle bakılan kürate katman: app/data/drug_catalog_curated.yaml). Çevrimdışı çalışır; `seed_catalog` ile
+  tabloya upsert edilir (`python -m app.seed`). `resolve_generic` (openfda.py) de bu listeden beslenir.
 - openFDA senkronu (`sync_from_openfda`, CLI: `python -m app.scripts.sync_drug_catalog`): ilgili EPC
   sınıflarındaki etken maddeleri `count=openfda.generic_name.exact` ile keşfeder, her etken madde için
   `count=openfda.brand_name.exact` ile ABD marka adlarını bağlar ve `openfda_available` bayrağını günceller.
@@ -49,7 +50,7 @@ _SALT_WORDS = {
     "sodium", "calcium", "magnesium", "tartrate", "succinate", "fumarate", "hemifumarate", "medoxomil",
     "cilexetil", "erbumine", "arginine", "tosylate", "bisulfate", "hydrobromide", "monohydrate", "dihydrate",
     "hemihydrate", "trihydrate", "anhydrous", "propanediol", "phosphate", "acetate", "citrate", "mesilate",
-    "etexilate", "lysine", "benzoate",
+    "etexilate", "lysine", "benzoate", "kamedoxomil",
 }
 # Form / salım şekli ifadeleri (etken madde değildir)
 _FORM_PHRASES = [
@@ -387,6 +388,7 @@ class SyncReport:
     unavailable: list[str] = field(default_factory=list)
     failed_queries: list[str] = field(default_factory=list)  # 5xx nedeniyle atlanan sorgular
     retries: int = 0  # 429 / 5xx sonrası tekrar sayısı
+    discarded: list[str] = field(default_factory=list)  # gürültü olarak elenen keşif terimleri
 
 
 class _OpenFDACounter:
@@ -465,6 +467,52 @@ def _usable_term(generic: str) -> bool:
         2 < len(c) <= 60 and not re.search(r"\d", c) for c in comps)
 
 
+# openFDA EPC sınıflarında gerçek senkronda görülen gürültü (docs/openfda-senkron.md): homeopatik ürünler
+# ("attention deficit mild drops" İnsülin analoğu sınıfında), çözücüler ("water", "diluent"), OTC ürün adları
+# ("bayer aspirin extra strength", "alka-seltzer pain relief").
+_NOISE_WORDS = {
+    "drops", "drop", "liquid", "liquescence", "water", "diluent", "relief", "reliever", "strength", "strenght",
+    "formula", "pain", "original", "flavor", "low", "dose", "bayer", "buffered", "effervescent", "regular",
+    "enteric", "coated", "genuine", "powder", "homeopathic", "transdermal", "system", "granule", "extra",
+    "headache", "nsaid", "alka-seltzer", "dna", "db", "chewable", "adult", "orange", "hamamelis", "aesculus",
+}
+_BIOSIMILAR_SUFFIX = re.compile(r"^(.+)-[a-z]{4}$")  # FDA biyobenzer son eki: "insulin glargine-yfgn"
+
+
+def _clean_discovered(generic: str) -> str:
+    comps = []
+    for c in generic.split(" + "):
+        m = _BIOSIMILAR_SUFFIX.match(c)
+        comps.append(m.group(1) if m and " " in m.group(1) else c)
+    return " + ".join(sorted(set(comps)))
+
+
+def _filter_discovered(candidates: dict[str, str], known: set[str]) -> dict[str, str]:
+    """Keşfedilen etken maddelerden gürültüyü eler.
+
+    Tekli: gürültü sözcüğü içermemeli, en fazla 3 sözcük (insülinler hariç). Kombinasyon: her bileşen ya
+    katalogda (TİTCK/kürate) ya da openFDA'da tekli olarak bulunmalı; böylece "aspirin + caffeine +
+    dextromethorphan" gibi OTC soğuk algınlığı kombinasyonları ve yazım hatalı birleşimler eklenmez."""
+    single_known = {k for k in known if " " not in k and "-" not in k}
+
+    def clean_single(c: str) -> bool:
+        words = c.split()
+        if set(words) & _NOISE_WORDS or (len(words) > 3 and words[0] != "insulin"):
+            return False
+        # Ayırıcısız yazılmış kombinasyon ("aspirin caffeine", "glyburide-metformin"): kendi satırı zaten var
+        parts = re.split(r"[\s-]+", c)
+        return c in known or len(parts) == 1 or sum(p in single_known for p in parts) < 1
+
+    singles = {g for g in candidates if " + " not in g and clean_single(g)}
+    ok_components = known | singles
+    out: dict[str, str] = {}
+    for g, label in candidates.items():
+        comps = g.split(" + ")
+        if len(comps) == 1 and g in singles or len(comps) > 1 and all(c in ok_components for c in comps):
+            out[g] = label
+    return out
+
+
 def sync_from_openfda(
     db: Session,
     *,
@@ -482,8 +530,9 @@ def sync_from_openfda(
       2. Kürate + keşfedilen her etken madde için `count=openfda.brand_name.exact` -> ABD marka adları ve
          `openfda_available`. Bir marka birden çok etken maddede çıkarsa en çok bileşenliye (kombinasyona)
          bağlanır (metformin sorgusu Janumet'i de döndürür; Janumet sitagliptin + metformin'e aittir).
-    Geçici 5xx yanıtları ve zaman aşımları iki kez tekrarlanır; yine başarısız olan tek sorgu atlanır (`failed_queries`; o etken
-    maddenin satırı değişmez). Ağ hatası, 429 ya da çok sayıda başarısız sorguda hiçbir değişiklik yazılmaz ve
+    Keşfedilen terimlerden homeopatik/OTC gürültü elenir (`_filter_discovered`, `discarded`). Geçici 5xx
+    yanıtları ve zaman aşımları iki kez tekrarlanır; yine başarısız olan tek sorgu atlanır (`failed_queries`;
+    o etken maddenin satırı değişmez). Ağ hatası, 429 ya da çok sayıda başarısız sorguda hiçbir değişiklik yazılmaz ve
     CatalogSyncError fırlatılır."""
     report = SyncReport()
     own_client = client is None
@@ -502,13 +551,16 @@ def sync_from_openfda(
                 report.failed_queries.append(search)
                 return None
 
-        discovered: dict[str, str] = {}  # generic -> TR sınıf adı
+        candidates: dict[str, str] = {}  # generic -> TR sınıf adı
         for epc, tr_label in classes if classes is not None else EPC_CLASSES:
             for term, _count in safe_count(f'openfda.pharm_class_epc:"{epc}"', "openfda.generic_name.exact") or []:
-                g = canonical_generic(term)
+                g = _clean_discovered(canonical_generic(term))
                 if _usable_term(g):
-                    discovered.setdefault(g, tr_label)
+                    candidates.setdefault(g, tr_label)
+        known = {c for g in rows for c in g.split(" + ")}
+        discovered = _filter_discovered(candidates, known)
         report.discovered = len(discovered)
+        report.discarded = sorted(set(candidates) - set(discovered))
 
         targets = list(dict.fromkeys(curated + sorted(discovered, key=lambda g: (g.count("+"), g))))[:max_generics]
         brand_owners: dict[str, list[str]] = {}  # normalize(marka) -> etken maddeler

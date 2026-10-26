@@ -1,0 +1,207 @@
+{
+ "_kaynak": "Gerçek openFDA yanıtı (2026-10-26, api.fda.gov), testler için kısaltılmış kesit",
+ "request_url": "https://api.fda.gov/drug/label.json?search=openfda.generic_name%3A%22metformin%22&count=openfda.brand_name.exact&limit=100",
+ "status": 200,
+ "body": {
+  "meta": {
+   "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+   "terms": "https://open.fda.gov/terms/",
+   "license": "https://open.fda.gov/license/",
+   "last_updated": "2026-10-23"
+  },
+  "results": [
+   {
+    "term": "Metformin Hydrochloride",
+    "count": 137
+   },
+   {
+    "term": "METFORMIN HYDROCHLORIDE",
+    "count": 80
+   },
+   {
+    "term": "Metformin HCl",
+    "count": 21
+   },
+   {
+    "term": "Metformin",
+    "count": 17
+   },
+   {
+    "term": "Metformin hydrochloride",
+    "count": 11
+   },
+   {
+    "term": "Glyburide and Metformin Hydrochloride",
+    "count": 10
+   },
+   {
+    "term": "METFORMIN HYDROCHLORIDE EXTENDED RELEASE",
+    "count": 10
+   },
+   {
+    "term": "glyburide-metformin hydrochloride",
+    "count": 7
+   },
+   {
+    "term": "Glipizide and Metformin Hydrochloride",
+    "count": 5
+   },
+   {
+    "term": "Metformin hydrochloride ER",
+    "count": 5
+   },
+   {
+    "term": "Metformin Hydrochloride Oral Solution",
+    "count": 4
+   },
+   {
+    "term": "JANUMET",
+    "count": 3
+   },
+   {
+    "term": "Metformin HCL",
+    "count": 3
+   },
+   {
+    "term": "Sitagliptin and Metformin Hydrochloride",
+    "count": 3
+   },
+   {
+    "term": "Glipizide and Metformin HCl",
+    "count": 2
+   },
+   {
+    "term": "JANUMET XR",
+    "count": 2
+   },
+   {
+    "term": "Metformin ER 500 mg",
+    "count": 2
+   },
+   {
+    "term": "Metformin ER 750 mg",
+    "count": 2
+   },
+   {
+    "term": "Pioglitazole and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "Pioglitazone Hydrochloride and Metformin Hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "Pioglitazone and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "Sitagliptin and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "ZITUVIMET",
+    "count": 2
+   },
+   {
+    "term": "ZITUVIMET XR",
+    "count": 2
+   },
+   {
+    "term": "alogliptin and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "glyburide and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "Actoplus Met",
+    "count": 1
+   },
+   {
+    "term": "DAPAGLIFLOZIN AND METFORMIN HYDROCHLORIDE",
+    "count": 1
+   },
+   {
+    "term": "Dapagliflozin and Metformin Hydrochloride",
+    "count": 1
+   },
+   {
+    "term": "Glipizide and metformin hcl",
+    "count": 1
+   },
+   {
+    "term": "INVOKAMET",
+    "count": 1
+   },
+   {
+    "term": "INVOKAMET XR",
+    "count": 1
+   },
+   {
+    "term": "Jentadueto",
+    "count": 1
+   },
+   {
+    "term": "Jentadueto XR",
+    "count": 1
+   },
+   {
+    "term": "KAZANO",
+    "count": 1
+   },
+   {
+    "term": "Linagliptin and metformin hydrochloride",
+    "count": 1
+   },
+   {
+    "term": "Metformin Hydrochloride Extended-Release 500mg",
+    "count": 1
+   },
+   {
+    "term": "Pioglitazone HCL and Metformin HCL",
+    "count": 1
+   },
+   {
+    "term": "SEGLUROMET",
+    "count": 1
+   },
+   {
+    "term": "Saxagliptin and Metformin",
+    "count": 1
+   },
+   {
+    "term": "Saxagliptin and Metformin Hydrochloride",
+    "count": 1
+   },
+   {
+    "term": "Sitagliptin and Metformin hydrochloride",
+    "count": 1
+   },
+   {
+    "term": "Synjardy",
+    "count": 1
+   },
+   {
+    "term": "Synjardy XR",
+    "count": 1
+   },
+   {
+    "term": "Trijardy XR",
+    "count": 1
+   },
+   {
+    "term": "XIGDUO XR",
+    "count": 1
+   },
+   {
+    "term": "dapagliflozin and metformin hydrochloride",
+    "count": 1
+   },
+   {
+    "term": "metformin hydrochloride",
+    "count": 1
+   }
+  ]
+ }
+}

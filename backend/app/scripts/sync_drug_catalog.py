@@ -5,7 +5,7 @@ Kullanım (backend/ dizininde ya da `docker compose exec api ...`):
     python -m app.scripts.sync_drug_catalog --no-brands     # yalnızca etken madde keşfi (az istek)
     python -m app.scripts.sync_drug_catalog --max-generics 50 --sleep 0.5
 
-Önce kürate Türkçe liste (app/data/drug_catalog_tr.yaml) yüklenir, sonra openFDA `count` uç noktasıyla
+Önce TİTCK tabanlı Türkçe liste (app/data/drug_catalog_tr.yaml) yüklenir, sonra openFDA `count` uç noktasıyla
 diyabet / hipertansiyon / lipid / antiagregan-antikoagülan EPC sınıflarındaki etken maddeler ve ABD marka
 adları eklenir. OPENFDA_API_KEY tanımlıysa kullanılır (anahtarsız sınır: dakikada 240, günde 1000 istek).
 Geçici 5xx yanıtları tekrarlanır, yine başarısız olan tek sorgu atlanır. Ağ yoksa, oran sınırı aşılırsa ya da
@@ -43,7 +43,7 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
         db.close()
 
     print(f"openFDA istekleri: {report.requests}")
-    print(f"Sınıflardan keşfedilen etken madde: {report.discovered}")
+    print(f"Sınıflardan keşfedilen etken madde: {report.discovered} (gürültü olarak elenen: {len(report.discarded)})")
     print(f"Katalog: {report.created} eklendi, {report.updated} güncellendi; openFDA'da bulunan: {report.available}")
     if report.retries:
         print(f"Tekrar edilen istek (429 / 5xx): {report.retries}")

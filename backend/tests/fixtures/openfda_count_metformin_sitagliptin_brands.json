@@ -1,0 +1,43 @@
+{
+ "_kaynak": "Gerçek openFDA yanıtı (2026-10-26, api.fda.gov), testler için kısaltılmış kesit",
+ "request_url": "https://api.fda.gov/drug/label.json?search=openfda.generic_name%3A%22metformin%22+AND+openfda.generic_name%3A%22sitagliptin%22&count=openfda.brand_name.exact&limit=100",
+ "status": 200,
+ "body": {
+  "meta": {
+   "disclaimer": "Do not rely on openFDA to make decisions regarding medical care. While we make every effort to ensure that data is accurate, you should assume all results are unvalidated. We may limit or otherwise restrict your access to the API in line with our Terms of Service.",
+   "terms": "https://open.fda.gov/terms/",
+   "license": "https://open.fda.gov/license/",
+   "last_updated": "2026-10-23"
+  },
+  "results": [
+   {
+    "term": "JANUMET",
+    "count": 3
+   },
+   {
+    "term": "Sitagliptin and Metformin Hydrochloride",
+    "count": 3
+   },
+   {
+    "term": "JANUMET XR",
+    "count": 2
+   },
+   {
+    "term": "Sitagliptin and metformin hydrochloride",
+    "count": 2
+   },
+   {
+    "term": "ZITUVIMET",
+    "count": 2
+   },
+   {
+    "term": "ZITUVIMET XR",
+    "count": 2
+   },
+   {
+    "term": "Sitagliptin and Metformin hydrochloride",
+    "count": 1
+   }
+  ]
+ }
+}

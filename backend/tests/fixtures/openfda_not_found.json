@@ -1,0 +1,11 @@
+{
+ "_kaynak": "Gerçek openFDA yanıtı (2026-10-26, api.fda.gov), testler için kısaltılmış kesit",
+ "request_url": "https://api.fda.gov/drug/label.json?search=openfda.generic_name%3A%22gliclazide%22&count=openfda.brand_name.exact&limit=100",
+ "status": 404,
+ "body": {
+  "error": {
+   "code": "NOT_FOUND",
+   "message": "No matches found!"
+  }
+ }
+}
