@@ -71,10 +71,10 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 ## Tur 2: bilinen sınırlılıkların giderilmesi (2026-10-26)
 
 ### F — Türkçe ilaç kataloğu TİTCK'ya dayalı + openFDA gerçek senkron
-- [ ] TİTCK ruhsatlı ürün listesinden (Excel) ATC filtresiyle (A10, C02, C03, C07, C08, C09, C10, B01) katalog üreten betik
-- [ ] Kürate listenin TİTCK listesiyle çapraz kontrol testi; ATC kodu → ilaç sınıfı
-- [ ] openFDA senkronunu gerçek API'ye karşı bir kez koştur, sonuçları belgeye yaz
-- [ ] Gerçek openFDA yanıtından test fikstürü; haftalık/elle tetiklenen openFDA erişim iş akışı
+- [x] TİTCK ruhsatlı ürün listesinden (Excel) ATC filtresiyle (A10, C02, C03, C07, C08, C09, C10, B01) katalog üreten betik — `python -m app.scripts.import_titck` (`app/services/titck.py`); TİTCK 23.10.2026 listesinden `drug_catalog_tr.yaml` yeniden üretildi: 230 etken madde/kombinasyon, 932 TR marka; eski elle derlenmiş liste `drug_catalog_curated.yaml` (kürate katman) oldu; `openpyxl==3.1.5`
+- [x] Kürate listenin TİTCK listesiyle çapraz kontrol testi; ATC kodu → ilaç sınıfı — `tests/test_titck.py` (temsili fikstür `tests/fixtures/titck_sample.csv`); TİTCK'da bulunmayan 15 kürate marka `aliases`'a taşındı
+- [x] openFDA senkronunu gerçek API'ye karşı bir kez koştur, sonuçları belgeye yaz — `docs/openfda-senkron.md` (6 koşu; geçici 500, zaman aşımı, kopan bağlantı ve keşif gürültüsü bulundu ve düzeltildi; son koşu 182 sn, 292 istek, 153/230 TR etken madde openFDA'da)
+- [x] Gerçek openFDA yanıtından test fikstürü; haftalık/elle tetiklenen openFDA erişim iş akışı — `tests/fixtures/openfda_*.json`, `tests/test_openfda_fixtures.py`; `.github/workflows/openfda-smoke.yml` → `pytest -m openfda_live` (normal koşuda atlanır)
 
 ### G — Nonce tabanlı CSP
 - [x] `middleware.ts` istek başına nonce + `script-src 'nonce-…' 'strict-dynamic'`; CSP Nginx'ten Next.js'e taşınır
