@@ -24,6 +24,14 @@
   Next.js'e düşerdi ve API yüzeyi gereksiz yere dışarı açılırdı.)
 - **Çoğaltma.** `api` için `deploy.replicas: ${API_REPLICAS:-3}`; `container_name` ve sabit host portu yok.
   `docker compose up -d --scale api=1` (ya da `API_REPLICAS=1`) ile tek kopyaya inilir.
+- **Kopya başına kaynak sınırı.** `deploy.resources.limits`: `cpus: ${API_CPUS:-1}`, `memory: ${API_MEMORY:-512M}`.
+  Sınır olmadan tek makinedeki kopyalar aynı çekirdekleri paylaşır; 1 kopya da makinenin tüm CPU'sunu
+  kullanabildiği için 1 ↔ 3 kopya karşılaştırması ölçeklenmeyi göstermez. Sınırla her kopya 1 çekirdekli ayrı bir
+  sunucu gibi davranır (ölçüm: [`docs/yuk-testi.md`](../docs/yuk-testi.md)). Üretimde sunucu boyutuna göre
+  ayarlayın, ör. `API_CPUS=2 API_MEMORY=1G docker compose up -d`.
+- **Süreç başına eşzamanlılık.** uvicorn `--limit-concurrency` = `API_LIMIT_CONCURRENCY` (vars. 150, aşılınca
+  503) ve anyio iş parçacığı havuzu `THREADPOOL_TOKENS` (vars. 200). Sınır, iş parçacığı + DB bağlantı havuzu
+  (5+10) toplamından küçük tutulur: aksi halde yük altında tüm iş parçacıkları bağlantı beklerken kilitlenir.
 - **Docker DNS ile dağıtım.** `resolver 127.0.0.11 valid=5s` + upstream'de `server api:8000 resolve`
   (nginx ≥ 1.27.3): `api` adı tüm kopyaların IP'lerine çözülür ve periyodik olarak yenilenir; ölçeklenen
   ya da yeniden başlayan kopyalar nginx yeniden yüklenmeden dağıtıma girer/çıkar.

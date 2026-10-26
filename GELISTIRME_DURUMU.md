@@ -81,10 +81,11 @@ Başlangıç: 2026-10-17 · Dal: `gelistirme` (eski repo `ilac-kocu`, `main`'den
 - [x] Diğer güvenlik başlıkları Nginx'te kalır; tarayıcıda CSP ihlali yok (headless Chrome, `/giris`; nginx imajıyla uçtan uca denenmedi)
 
 ### H — Yük testi düzeltmeleri
-- [ ] API kopyalarına CPU sınırı (`cpus`)
-- [ ] k6: sanal kullanıcı başına tek giriş
-- [ ] Hekim hasta listesindeki N+1 sorgunun giderilmesi
-- [ ] 1 vs 3 kopya ölçümünün tekrarı, `docs/yuk-testi.md` güncellemesi
+- [x] API kopyalarına CPU sınırı (`API_CPUS` vars. 1, `API_MEMORY` vars. 512M)
+- [x] k6: hesap başına tek giriş (`setup()`), süre dolumu/401'de yalnız o VU yeniden girer
+- [x] Hekim hasta listesindeki N+1 sorgunun giderilmesi (2 ve 20 hastada 7 sorgu; `tests/test_patient_list_queries.py`)
+- [x] 1 vs 3 kopya ölçümünün tekrarı, `docs/yuk-testi.md` güncellemesi (1 kopya p95 2569 ms → 3 kopya 56 ms; durdurmada hata yok)
+- [x] Ölçümde bulunan iş parçacığı/DB havuzu kilitlenmesi giderildi (`THREADPOOL_TOKENS` 200, `API_LIMIT_CONCURRENCY` 150)
 
 ## Kalan (bu turun dışında)
 - Demo videosu (M5) — kullanıcı çekecek.

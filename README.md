@@ -77,7 +77,7 @@ Ayrıntı: [`frontend/README.md`](frontend/README.md)
 
 ```bash
 cp .env.example .env                          # JWT_SECRET'ı değiştirin; VAPID ve OPENROUTER_API_KEY isteğe bağlı
-docker compose up --build                     # PostgreSQL + pgvector, Redis, nginx, API ×3, web — migration otomatik
+docker compose up --build                     # PostgreSQL + pgvector, Redis, nginx, API ×3 (kopya başına 1 CPU), web — migration otomatik
 docker compose exec api python -m app.seed    # sentetik demo verisi
 ```
 
@@ -87,6 +87,7 @@ docker compose exec api python -m app.seed    # sentetik demo verisi
 | http://localhost:8000/docs | Swagger / OpenAPI (nginx iç API ağ geçidi, yalnız yerel) |
 
 Altyapı (yük dengeleme, Prometheus/Grafana/Jaeger, TLS): [`infra/README.md`](infra/README.md) · yük testi: [`docs/yuk-testi.md`](docs/yuk-testi.md)
+(aynı makinede, kopya başına 1 CPU ile 100 sanal kullanıcı: 1 kopya p95 2.6 sn → 3 kopya p95 56 ms, hatasız; bir kopya durdurulunca hata yok)
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
