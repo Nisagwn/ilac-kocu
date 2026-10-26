@@ -3,6 +3,7 @@
 #   --profile observability : + prometheus, grafana, jaeger
 #   --profile loadtest      : + k6 (docs/yuk-testi.md)
 # Host portları ortam değişkenleriyle değiştirilebilir (HTTP_PORT, API_GATEWAY_PORT, DB_PORT, ...).
+# API kopyası başına kaynak sınırı: API_CPUS (vars. 1), API_MEMORY (vars. 512M).
 services:
   db:
     image: pgvector/pgvector:pg16
@@ -53,6 +54,12 @@ services:
       OTEL_EXPORTER_OTLP_ENDPOINT: ${OTEL_EXPORTER_OTLP_ENDPOINT:-}
     deploy:
       replicas: ${API_REPLICAS:-3}
+      # Her kopya ayrı bir sunucu gibi davransın: tek makinede sınırsız kopyalar aynı çekirdekleri paylaşır ve
+      # 1 ↔ 3 kopya karşılaştırması anlamsızlaşır (docs/yuk-testi.md). Üretimde sunucu boyutuna göre ayarlayın.
+      resources:
+        limits:
+          cpus: "${API_CPUS:-1}"
+          memory: ${API_MEMORY:-512M}
     expose: ["8000"]
     # uvicorn --timeout-graceful-shutdown 20 (backend/Dockerfile); süren istekler bitene kadar SIGKILL yok
     stop_grace_period: 30s
