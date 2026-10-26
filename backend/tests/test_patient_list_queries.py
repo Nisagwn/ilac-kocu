@@ -100,3 +100,15 @@ def test_clinician_patient_list_constant_query_count(client, db, path):
     crit = [r["critical_alerts"] for r in rows_large]
     assert crit == sorted(crit, reverse=True)
     assert all(r["last_measurement_at"] is not None and r["adherence_7d"] is not None for r in rows_large)
+
+
+def test_threadpool_larger_than_db_pool(client):
+    """Yük altında kilitlenmeyi önler: iş parçacığı havuzu, bağlantı havuzu (5+10) ve uvicorn eşzamanlılık
+    sınırının (docker-compose.yml, vars. 150) toplamından küçük kalmaz (app/config.py threadpool_tokens)."""
+    import anyio.to_thread
+
+    from app.config import get_settings
+
+    tokens = client.portal.call(lambda: anyio.to_thread.current_default_thread_limiter().total_tokens)
+    assert tokens == get_settings().threadpool_tokens
+    assert tokens > 150 - 15
