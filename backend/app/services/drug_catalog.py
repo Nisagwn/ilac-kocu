@@ -409,14 +409,15 @@ class _OpenFDACounter:
             self.report.requests += 1
             try:
                 resp = self.client.get(self.base_url, params=params)
-            except httpx.TimeoutException as e:
-                # openFDA ağır `count` sorgularında zaman zaman yanıt vermez; geçici hata gibi ele alınır
+            except (httpx.TimeoutException, httpx.RemoteProtocolError, httpx.ReadError) as e:
+                # openFDA ağır `count` sorgularında zaman zaman yanıt vermez ya da bağlantıyı yanıt ortasında
+                # kapatır ("incomplete chunked read"); bağlantı kurulduğu için geçici hata gibi ele alınır
                 if attempt < 2:
-                    log.warning("openFDA zaman aşımı (%s); tekrar deneniyor", search)
+                    log.warning("openFDA %s (%s); tekrar deneniyor", type(e).__name__, search)
                     self.report.retries += 1
                     self.sleeper(2.0 * (attempt + 1))
                     continue
-                raise _QueryFailed(f"zaman aşımı: {search}") from e
+                raise _QueryFailed(f"{type(e).__name__}: {search}") from e
             except httpx.HTTPError as e:
                 raise CatalogSyncError(f"openFDA'ya ulaşılamadı ({type(e).__name__}: {e}). "
                                        "İnternet bağlantısını ve OPENFDA_BASE_URL ayarını kontrol edin.") from e

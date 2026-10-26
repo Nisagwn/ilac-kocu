@@ -328,6 +328,8 @@ def test_sync_transient_5xx_and_timeout_are_retried_then_skipped(db):
             return httpx.Response(500, json={"error": {"code": "SERVER_ERROR"}})
         if key == 'openfda.generic_name:"bisoprolol"':
             raise httpx.ReadTimeout("yavaş", request=request)
+        if key == 'openfda.generic_name:"metformin"' and calls[key] == 1:
+            raise httpx.RemoteProtocolError("peer closed connection (incomplete chunked read)", request=request)
         if key == 'openfda.generic_name:"atenolol"':
             return httpx.Response(503, json={})
         return _fake_openfda(request)
@@ -339,8 +341,9 @@ def test_sync_transient_5xx_and_timeout_are_retried_then_skipped(db):
                                       classes=[("Dipeptidyl Peptidase 4 Inhibitor [EPC]", "DPP-4 inhibitörü")])
     assert calls['openfda.pharm_class_epc:"Dipeptidyl Peptidase 4 Inhibitor [EPC]"'] == 2  # 500 sonrası başarılı
     assert calls['openfda.generic_name:"bisoprolol"'] == 3 and calls['openfda.generic_name:"atenolol"'] == 3
+    assert calls['openfda.generic_name:"metformin"'] == 2  # yarıda kesilen yanıt tekrarla başarılı
     assert set(report.failed_queries) == {'openfda.generic_name:"bisoprolol"', 'openfda.generic_name:"atenolol"'}
-    assert report.retries >= 5
+    assert report.retries >= 6
     rows = {r.generic_name: r for r in db.scalars(select(DrugCatalog))}
     assert rows["alogliptin"].source == "openfda"  # tekrar sonrası keşif çalıştı
     assert "bisoprolol" not in report.unavailable  # atlanan sorgu "bulunamadı" sayılmaz
