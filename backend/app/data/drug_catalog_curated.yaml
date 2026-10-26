@@ -1,0 +1,342 @@
+# Kürate katman: TİTCK'dan üretilen Türkçe ilaç kataloğunun (drug_catalog_tr.yaml) elle bakılan girdisi.
+#
+# Bu dosya uygulama tarafından doğrudan okunmaz. `python -m app.scripts.import_titck <TİTCK Excel>` TİTCK
+# "Ruhsatlı Beşeri Tıbbi Ürünler Listesi"nden app/data/drug_catalog_tr.yaml'ı üretirken bu dosyayı şunlar için
+# kullanır: görünen ad (display), Türkçe sınıf adı düzeltmesi (pharm_class), aranabilir ek adlar (aliases) ve
+# öncelikli/özel yazımlı TR markalar (brands). Buradaki her TR marka TİTCK listesinde ilgili etken maddenin
+# ruhsatlı ürünü olarak bulunmalıdır; tests/test_titck.py üretilmiş katalogla çapraz kontrol eder.
+# TİTCK listesinde bulunmayan uluslararası adlar (Glucophage, Zocor...) brands yerine aliases'a yazılır.
+#
+# Alanlar:
+#   generic      etken madde(ler), İngilizce (openFDA sorgusu için); kombinasyonlarda " + " ile ayrılır
+#   display      arayüzde gösterilecek ad (verilmezse etken madde tablosundan üretilir)
+#   pharm_class  Türkçe farmakolojik sınıf (verilmezse ATC kodundan üretilir)
+#   brands       Türkiye'de yaygın ticari adlar (TİTCK'da doğrulanır)
+#   aliases      (isteğe bağlı) aranabilir ek adlar, ör. Türkçe etken madde adı, ruhsatı olmayan uluslararası ad
+#
+# Not: Bu liste eğitim/demo amaçlıdır; ruhsat durumu için TİTCK kayıtları esas alınmalıdır.
+
+# ------------------------------------------------------------------ Diyabet (oral)
+- generic: metformin
+  pharm_class: Biguanid (oral antidiyabetik)
+  aliases: [Glucophage]  # TİTCK listesinde yok (uluslararası ad)
+  brands: [Glifor, Matofin, Diaformin, Gluformin]
+- generic: glimepiride
+  display: Glimepirid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  brands: [Amaryl]
+- generic: gliclazide
+  display: Gliklazid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  brands: [Diamicron, Diamicron MR, Oramikron, Glumikron]
+- generic: glipizide
+  display: Glipizid
+  pharm_class: Sülfonilüre (oral antidiyabetik)
+  aliases: [Minidiab]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: repaglinide
+  display: Repaglinid
+  pharm_class: Meglitinid (oral antidiyabetik)
+  aliases: [NovoNorm]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: acarbose
+  display: Akarboz
+  pharm_class: Alfa-glukozidaz inhibitörü
+  brands: [Glucobay]
+- generic: pioglitazone
+  display: Pioglitazon
+  pharm_class: Tiyazolidindion (oral antidiyabetik)
+  brands: [Actos]
+- generic: sitagliptin
+  pharm_class: DPP-4 inhibitörü
+  brands: [Januvia]
+- generic: vildagliptin
+  pharm_class: DPP-4 inhibitörü
+  brands: [Galvus]
+- generic: saxagliptin
+  display: Saksagliptin
+  pharm_class: DPP-4 inhibitörü
+  brands: [Onglyza]
+- generic: linagliptin
+  pharm_class: DPP-4 inhibitörü
+  brands: [Trajenta]
+- generic: sitagliptin + metformin
+  pharm_class: DPP-4 inhibitörü + biguanid
+  brands: [Janumet]
+- generic: vildagliptin + metformin
+  pharm_class: DPP-4 inhibitörü + biguanid
+  aliases: [Galvusmet]  # TİTCK listesinde yok (uluslararası ad)
+  brands: [Galvus Met]
+- generic: saxagliptin + metformin
+  display: Saksagliptin + Metformin
+  pharm_class: DPP-4 inhibitörü + biguanid
+  aliases: [Kombiglyze XR]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: linagliptin + metformin
+  pharm_class: DPP-4 inhibitörü + biguanid
+  aliases: [Jentadueto]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: empagliflozin
+  pharm_class: SGLT2 inhibitörü
+  brands: [Jardiance]
+- generic: dapagliflozin
+  pharm_class: SGLT2 inhibitörü
+  brands: [Forziga]
+- generic: empagliflozin + metformin
+  pharm_class: SGLT2 inhibitörü + biguanid
+  brands: [Synjardy]
+- generic: dapagliflozin + metformin
+  pharm_class: SGLT2 inhibitörü + biguanid
+  brands: [Xigduo XR]
+- generic: empagliflozin + linagliptin
+  pharm_class: SGLT2 inhibitörü + DPP-4 inhibitörü
+  brands: [Glyxambi]
+
+# ------------------------------------------------------------------ Diyabet (enjeksiyon)
+- generic: liraglutide
+  display: Liraglutid
+  pharm_class: GLP-1 reseptör agonisti
+  brands: [Victoza]
+- generic: dulaglutide
+  display: Dulaglutid
+  pharm_class: GLP-1 reseptör agonisti
+  brands: [Trulicity]
+- generic: semaglutide
+  display: Semaglutid
+  pharm_class: GLP-1 reseptör agonisti
+  brands: [Ozempic]
+- generic: exenatide
+  display: Eksenatid
+  pharm_class: GLP-1 reseptör agonisti
+  brands: [Byetta]
+- generic: insulin glargine
+  display: İnsülin glarjin
+  pharm_class: İnsülin (uzun etkili)
+  brands: [Lantus, Toujeo, Basaglar]
+- generic: insulin detemir
+  display: İnsülin detemir
+  pharm_class: İnsülin (uzun etkili)
+  brands: [Levemir]
+- generic: insulin degludec
+  display: İnsülin degludek
+  pharm_class: İnsülin (uzun etkili)
+  brands: [Tresiba]
+- generic: insulin aspart
+  display: İnsülin aspart
+  pharm_class: İnsülin (hızlı etkili)
+  brands: [NovoRapid]
+- generic: insulin lispro
+  display: İnsülin lispro
+  pharm_class: İnsülin (hızlı etkili)
+  brands: [Humalog]
+- generic: insulin glulisine
+  display: İnsülin glulizin
+  pharm_class: İnsülin (hızlı etkili)
+  brands: [Apidra]
+
+# ------------------------------------------------------------------ Hipertansiyon
+- generic: amlodipine
+  display: Amlodipin
+  pharm_class: Kalsiyum kanal blokeri
+  brands: [Norvasc]
+- generic: lercanidipine
+  display: Lerkanidipin
+  pharm_class: Kalsiyum kanal blokeri
+  aliases: [Zanidip]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: nifedipine
+  display: Nifedipin
+  pharm_class: Kalsiyum kanal blokeri
+  brands: [Adalat Crono]
+- generic: diltiazem
+  pharm_class: Kalsiyum kanal blokeri
+  brands: [Diltizem]
+- generic: verapamil
+  pharm_class: Kalsiyum kanal blokeri
+  brands: [Isoptin]
+- generic: perindopril
+  pharm_class: ACE inhibitörü
+  brands: [Coversyl]
+- generic: perindopril + indapamide
+  display: Perindopril + İndapamid
+  pharm_class: ACE inhibitörü + diüretik
+  brands: [Coversyl Plus]
+- generic: perindopril + amlodipine
+  display: Perindopril + Amlodipin
+  pharm_class: ACE inhibitörü + kalsiyum kanal blokeri
+  brands: [Coveram]
+- generic: ramipril
+  pharm_class: ACE inhibitörü
+  brands: [Delix]
+- generic: ramipril + hydrochlorothiazide
+  display: Ramipril + Hidroklorotiyazid
+  pharm_class: ACE inhibitörü + diüretik
+  brands: [Delix Plus]
+- generic: enalapril
+  pharm_class: ACE inhibitörü
+  aliases: [Renitec]  # TİTCK listesinde yok (uluslararası ad)
+  brands: [Konveril]
+- generic: lisinopril
+  pharm_class: ACE inhibitörü
+  aliases: [Zestril]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: cilazapril
+  display: Silazapril
+  pharm_class: ACE inhibitörü
+  brands: [Inhibace]
+- generic: metoprolol
+  pharm_class: Beta bloker
+  brands: [Beloc, Beloc Zok]
+- generic: bisoprolol
+  pharm_class: Beta bloker
+  brands: [Concor]
+- generic: bisoprolol + hydrochlorothiazide
+  display: Bisoprolol + Hidroklorotiyazid
+  pharm_class: Beta bloker + diüretik
+  aliases: [Concor Plus]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: nebivolol
+  pharm_class: Beta bloker
+  brands: [Vasoxen]
+- generic: carvedilol
+  display: Karvedilol
+  pharm_class: Alfa/beta bloker
+  brands: [Dilatrend]
+- generic: atenolol
+  pharm_class: Beta bloker
+  brands: [Tensinor]
+- generic: telmisartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  aliases: [Pritor]  # TİTCK listesinde yok (uluslararası ad)
+  brands: [Micardis]
+- generic: telmisartan + hydrochlorothiazide
+  display: Telmisartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Micardis Plus]
+- generic: valsartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  brands: [Diovan]
+- generic: valsartan + hydrochlorothiazide
+  display: Valsartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Co-Diovan]
+- generic: valsartan + amlodipine
+  display: Valsartan + Amlodipin
+  pharm_class: ARB + kalsiyum kanal blokeri
+  brands: [Exforge]
+- generic: candesartan
+  display: Kandesartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  brands: [Atacand]
+- generic: candesartan + hydrochlorothiazide
+  display: Kandesartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Atacand Plus]
+- generic: losartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  brands: [Cozaar]
+- generic: losartan + hydrochlorothiazide
+  display: Losartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Hyzaar]
+- generic: irbesartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  aliases: [Aprovel]  # TİTCK listesinde yok (uluslararası ad)
+  brands: [Karvea]
+- generic: irbesartan + hydrochlorothiazide
+  display: İrbesartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Karvezide]
+- generic: olmesartan
+  pharm_class: Anjiyotensin reseptör blokeri (ARB)
+  brands: [Olmetec]
+- generic: olmesartan + amlodipine
+  display: Olmesartan + Amlodipin
+  pharm_class: ARB + kalsiyum kanal blokeri
+  brands: [Sevikar]
+- generic: olmesartan + hydrochlorothiazide
+  display: Olmesartan + Hidroklorotiyazid
+  pharm_class: ARB + diüretik
+  brands: [Olmetec Plus]
+- generic: indapamide
+  display: İndapamid
+  pharm_class: Tiyazid benzeri diüretik
+  brands: [Fludex]
+- generic: hydrochlorothiazide
+  display: Hidroklorotiyazid
+  pharm_class: Tiyazid diüretik
+  brands: []
+- generic: furosemide
+  display: Furosemid
+  pharm_class: Kıvrım (loop) diüretiği
+  brands: [Lasix]
+- generic: spironolactone
+  display: Spironolakton
+  pharm_class: Aldosteron antagonisti (potasyum tutucu diüretik)
+  brands: [Aldactone]
+- generic: doxazosin
+  display: Doksazosin
+  pharm_class: Alfa bloker
+  brands: [Cardura]
+
+# ------------------------------------------------------------------ Lipid
+- generic: atorvastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  brands: [Lipitor, Ator]
+- generic: rosuvastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  brands: [Crestor]
+- generic: simvastatin
+  pharm_class: Statin (HMG-KoA redüktaz inhibitörü)
+  aliases: [Zocor]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: ezetimibe
+  display: Ezetimib
+  pharm_class: Kolesterol emilim inhibitörü
+  brands: [Ezetrol]
+- generic: ezetimibe + atorvastatin
+  display: Ezetimib + Atorvastatin
+  pharm_class: Kolesterol emilim inhibitörü + statin
+  aliases: [Atozet]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: fenofibrate
+  display: Fenofibrat
+  pharm_class: Fibrat
+  brands: [Lipanthyl]
+
+# ------------------------------------------------------------------ Antiagregan / antikoagülan
+- generic: aspirin
+  display: Asetilsalisilik asit (aspirin)
+  aliases: [Asetilsalisilik asit, ASA]
+  pharm_class: Antiagregan
+  brands: [Coraspin, Ecopirin]
+- generic: clopidogrel
+  display: Klopidogrel
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  brands: [Plavix]
+- generic: ticagrelor
+  display: Tikagrelor
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  brands: [Brilinta]
+- generic: prasugrel
+  pharm_class: Antiagregan (P2Y12 inhibitörü)
+  brands: [Effient]
+- generic: warfarin
+  pharm_class: Antikoagülan (K vitamini antagonisti)
+  aliases: [Coumadin]  # TİTCK listesinde yok (uluslararası ad)
+  brands: []
+- generic: rivaroxaban
+  display: Rivaroksaban
+  pharm_class: Antikoagülan (faktör Xa inhibitörü)
+  brands: [Xarelto]
+- generic: apixaban
+  display: Apiksaban
+  pharm_class: Antikoagülan (faktör Xa inhibitörü)
+  brands: [Eliquis]
+- generic: dabigatran
+  pharm_class: Antikoagülan (doğrudan trombin inhibitörü)
+  brands: [Pradaxa]
+- generic: edoxaban
+  display: Edoksaban
+  pharm_class: Antikoagülan (faktör Xa inhibitörü)
+  brands: [Lixiana]
