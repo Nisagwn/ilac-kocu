@@ -8,7 +8,8 @@ Kullanım (backend/ dizininde ya da `docker compose exec api ...`):
 Önce kürate Türkçe liste (app/data/drug_catalog_tr.yaml) yüklenir, sonra openFDA `count` uç noktasıyla
 diyabet / hipertansiyon / lipid / antiagregan-antikoagülan EPC sınıflarındaki etken maddeler ve ABD marka
 adları eklenir. OPENFDA_API_KEY tanımlıysa kullanılır (anahtarsız sınır: dakikada 240, günde 1000 istek).
-Ağ yoksa ya da openFDA hata verirse veritabanı değişmez ve komut 2 koduyla çıkar.
+Geçici 5xx yanıtları tekrarlanır, yine başarısız olan tek sorgu atlanır. Ağ yoksa, oran sınırı aşılırsa ya da
+sorguların çoğu başarısızsa veritabanı değişmez ve komut 2 koduyla çıkar. Gerçek API'ye karşı ölçüm: docs/openfda-senkron.md.
 """
 
 from __future__ import annotations
@@ -44,6 +45,10 @@ def main(argv: list[str] | None = None, session_factory=SessionLocal) -> int:
     print(f"openFDA istekleri: {report.requests}")
     print(f"Sınıflardan keşfedilen etken madde: {report.discovered}")
     print(f"Katalog: {report.created} eklendi, {report.updated} güncellendi; openFDA'da bulunan: {report.available}")
+    if report.retries:
+        print(f"Tekrar edilen istek (429 / 5xx): {report.retries}")
+    if report.failed_queries:
+        print(f"Geçici sunucu hatası nedeniyle atlanan sorgu: {len(report.failed_queries)}")
     if report.unavailable:
         print("openFDA'da etiketi bulunamayan kürate etken maddeler: " + ", ".join(sorted(report.unavailable)))
     return 0

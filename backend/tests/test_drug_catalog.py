@@ -313,3 +313,42 @@ def test_sync_cli_reports_error(monkeypatch, db, capsys):
     monkeypatch.setattr(cli, "sync_from_openfda", boom)
     assert cli.main(["--no-brands"], session_factory=lambda: db) == 2
     assert "tamamlanamadı" in capsys.readouterr().err
+
+
+def test_sync_transient_5xx_and_timeout_are_retried_then_skipped(db):
+    """openFDA zaman zaman geçici HTTP 500 (search_phase_execution_exception) ve zaman aşımı verir (gerçek
+    senkronda gözlendi, docs/openfda-senkron.md): tekrar denenir, yine olmazsa yalnızca o sorgu atlanır."""
+    calls: dict[str, int] = {}
+
+    def flaky(request):
+        p = request.url.params
+        key = p["search"]
+        calls[key] = calls.get(key, 0) + 1
+        if "Dipeptidyl" in key and calls[key] == 1:
+            return httpx.Response(500, json={"error": {"code": "SERVER_ERROR"}})
+        if key == 'openfda.generic_name:"bisoprolol"':
+            raise httpx.ReadTimeout("yavaş", request=request)
+        if key == 'openfda.generic_name:"atenolol"':
+            return httpx.Response(503, json={})
+        return _fake_openfda(request)
+
+    dc.seed_catalog(db)
+    before = db.scalar(select(DrugCatalog).where(DrugCatalog.generic_name == "atenolol")).updated_at
+    with httpx.Client(transport=httpx.MockTransport(flaky)) as c:
+        report = dc.sync_from_openfda(db, client=c, sleeper=lambda s: None, sleep=0,
+                                      classes=[("Dipeptidyl Peptidase 4 Inhibitor [EPC]", "DPP-4 inhibitörü")])
+    assert calls['openfda.pharm_class_epc:"Dipeptidyl Peptidase 4 Inhibitor [EPC]"'] == 2  # 500 sonrası başarılı
+    assert calls['openfda.generic_name:"bisoprolol"'] == 3 and calls['openfda.generic_name:"atenolol"'] == 3
+    assert set(report.failed_queries) == {'openfda.generic_name:"bisoprolol"', 'openfda.generic_name:"atenolol"'}
+    assert report.retries >= 5
+    rows = {r.generic_name: r for r in db.scalars(select(DrugCatalog))}
+    assert rows["alogliptin"].source == "openfda"  # tekrar sonrası keşif çalıştı
+    assert "bisoprolol" not in report.unavailable  # atlanan sorgu "bulunamadı" sayılmaz
+    assert rows["atenolol"].updated_at == before  # atlanan etken maddenin satırı değişmedi
+
+
+def test_sync_aborts_when_most_queries_fail(db):
+    with httpx.Client(transport=httpx.MockTransport(lambda r: httpx.Response(500, json={}))) as c:
+        with pytest.raises(dc.CatalogSyncError, match="çoğu başarısız"):
+            dc.sync_from_openfda(db, client=c, sleeper=lambda s: None, sleep=0, max_generics=5)
+    assert db.scalar(select(DrugCatalog.id).where(DrugCatalog.source == "openfda")) is None
