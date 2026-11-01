@@ -27,6 +27,8 @@ Tip 2 diyabet ve hipertansiyon hastalarının ilaç ve ölçüm takibini yaptı�
 | M4 — Yapay zekâ bileşeni | 1 Oca 2027 | ✅ Claude tool-use koç, RAG (pgvector), maliyet limiti, 232 senaryoluk guardrail seti, 469 backend testi |
 | M5 — Final teslim | 17 Oca 2027 | ✅ rapor, kurulum, demo senaryosu (`docs/M5/`) — video kayıt bekliyor |
 
+> **Not:** "Tarih" sütunu dersin ara teslim takvimidir ([`docs/PROJE_TANIMI.md`](docs/PROJE_TANIMI.md)). ✅ işareti, o teslimin kapsamındaki işin depoda tamamlandığını gösterir; teslim tarihi gelmemiş aşamalar henüz resmî olarak teslim edilmemiştir.
+
 ## Ekranlar
 
 | Rol | Sayfa | İçerik |
@@ -87,7 +89,7 @@ docker compose exec api python -m app.seed    # sentetik demo verisi
 | http://localhost:8000/docs | Swagger / OpenAPI (nginx iç API ağ geçidi, yalnız yerel) |
 
 Altyapı (yük dengeleme, Prometheus/Grafana/Jaeger, TLS): [`infra/README.md`](infra/README.md) · yük testi: [`docs/yuk-testi.md`](docs/yuk-testi.md)
-(aynı makinede, kopya başına 1 CPU ile 100 sanal kullanıcı: 1 kopya p95 2.6 sn → 3 kopya p95 56 ms, hatasız; bir kopya durdurulunca hata yok)
+(aynı makinede, kopya başına 1 CPU ile 100 sanal kullanıcı: 1 kopya p95 2.6 sn → 3 kopya p95 56 ms, sunucu hatası yok — 3 kopyadaki %0.44 başarısız istek, kullanıcı başına istek sınırının döndürdüğü 429'dur; bir kopya durdurulunca hata yok, ancak 100 sanal kullanıcıda iki kopyayla p95 eşiği aşıldı. Senaryoda koç/LLM uçları yoktur.)
 
 Demo hesaplar (şifre `demo12345`): `hasta@demo.local`, `hekim@demo.local`, `yakin@demo.local`
 
@@ -379,7 +381,7 @@ erDiagram
 | `GET /alerts`, `POST /alerts/{id}/ack` | Hekimin açık uyarıları | hekim |
 | `GET /drugs/label?name=Glifor` | openFDA etiketi (TR ticari isim → etken madde); başarılı sorgu eğitim içeriğine de eklenir (en iyi çaba) | tümü |
 | `GET /education` | Eğitim içeriği (RAG korpusu) listesi; `kind=curated\|openfda` süzgeci | giriş yapmış herkes |
-| `GET /education/search?q=` | Anlamsal arama (kosinüs + anahtar kelime), kaynaklı sonuçlar | giriş yapmış herkes |
+| `GET /education/search?q=` | Vektör (kosinüs) + anahtar kelime hibrit arama, kaynaklı sonuçlar (varsayılan yerel embedding sözcükseldir; anlamsal model isteğe bağlı) | giriş yapmış herkes |
 | `POST /education/ingest-drug?name=` | openFDA etiketinden eğitim içeriği üretir (doz bölümleri ayıklanır) | giriş yapmış herkes |
 | `POST /coach/jobs`, `GET /coach/jobs/{id}` | Koç: acil/doz mesajı anında (200), diğerleri kuyrukta (202 → sorgu); 10/dk | hasta |
 | `POST /coach/chat`, `GET /coach/history` | Koç senkron (test/değerlendirme), sohbet geçmişi | hasta |
@@ -396,10 +398,10 @@ mesaj → [Katman 1: girdi filtresi] → [bütçe/limit] → Claude tool-use dö
 
 - **Tool'lar:** `get_adherence`, `get_measurements`, `get_medications`, `search_education`. Hasta kimliği hiçbir tool şemasında yer almaz; sunucu JWT'deki hastayı bağlar — model başka hastaya erişemez.
 - **Structured output:** model `output_config.format` JSON şemasıyla `message`, `risk_level` (low/medium/high/emergency), `escalate_to_clinician`, `source_ids` döndürür; sunucu `source_ids`'i kaynak listesine (`sources`) çevirir. `escalate_to_clinician=true` hekime uyarı düşürür.
-- **RAG:** 31 kürate Türkçe hasta eğitim içeriği ([`education.yaml`](backend/app/data/education.yaml); kaynaklar WHO, NHS, CDC, ADA, ESH, IWGDF, TEMD, Sağlık Bakanlığı, TİTCK — tümü `reviewed: false`, klinisyen gözden geçirmesi gerekir) + istek üzerine eklenen openFDA etiket özetleri. PostgreSQL'de pgvector `vector(384)` + HNSW (kosinüs); SQLite'ta (testler) JSON. Varsayılan embedding çevrimdışı ve deterministik (`EMBEDDING_PROVIDER=local`); isteğe bağlı Voyage (`voyage-3.5-lite`, 384'e kırpılır). Skor = 0,7 kosinüs + 0,3 anahtar kelime, eşik `RAG_MIN_SCORE=0.25`, `search_education` en iyi 3 sonucu döndürür.
+- **RAG:** 31 kürate Türkçe hasta eğitim içeriği ([`education.yaml`](backend/app/data/education.yaml); kaynaklar WHO, NHS, CDC, ADA, ESH, IWGDF, TEMD, Sağlık Bakanlığı, TİTCK — tümü `reviewed: false`, klinisyen gözden geçirmesi gerekir) + istek üzerine eklenen openFDA etiket özetleri. PostgreSQL'de pgvector `vector(384)` + HNSW (kosinüs); SQLite'ta (testler) JSON. Varsayılan embedding çevrimdışı ve deterministik bir hashing embedding'idir (`EMBEDDING_PROVIDER=local`; sözcüksel benzerlik, anlamsal bir dil modeli değildir); isteğe bağlı yerel anlamsal model (`EMBEDDING_PROVIDER=fastembed`, [kurulum F](docs/M5/kurulum.md)) veya Voyage (`voyage-3.5-lite`, 384'e kırpılır). Skor = 0,7 kosinüs + 0,3 anahtar kelime, eşik `RAG_MIN_SCORE=0.25`, `search_education` en iyi 3 sonucu döndürür.
 - **Grounding:** `source_ids` yalnızca o istekte `search_education`'ın gerçekten döndürdüğü kimlikler (veya `0` = WHO raporu) ise kabul edilir; diğerleri sunucuda atılır.
 - **Maliyet kontrolü:** hasta başına günde 30 istek ve 300 000 token (`LLM_DAILY_PATIENT_REQUESTS`, `LLM_DAILY_PATIENT_TOKENS`), günde 3 özet anlatısı (`LLM_DAILY_SUMMARY_REQUESTS`), aylık 50 USD toplam bütçe (`LLM_MONTHLY_BUDGET_USD`). Her çağrı `llm_usage` tablosuna yazılır (sayaçlar Redis'te değil veritabanındadır; mesaj içeriği tutulmaz). Limit aşılırsa kural tabanlı yanıt döner (`guardrail_action=budget_exceeded`).
-- **Model ve döngü:** varsayılan `claude-opus-5-5` (`LLM_MODEL`; `claude-sonnet-5-5` daha ucuzdur), `effort=low`, `max_tokens=2048`, 30 sn zaman aşımı, istek başına en çok 4 model çağrısı (`LLM_MAX_TOOL_ITERATIONS`; son çağrıda `tool_choice=none`). Tool'lar `strict`; sistem istemi ve tool tanımları prompt cache'lenir; geçmişten son 6 mesaj gönderilir.
+- **Model ve döngü:** `LLM_MODEL` boşsa doğrudan Anthropic API'de `claude-opus-5-5` (`claude-sonnet-5-5` daha ucuzdur), OpenRouter'da `anthropic/claude-sonnet-5.5`; `effort=low` (yalnızca Anthropic), `max_tokens=2048`, 30 sn zaman aşımı, tool-use döngüsünde istek başına en çok 4 model çağrısı (`LLM_MAX_TOOL_ITERATIONS`; son çağrıda `tool_choice=none`). Taslak yanıt çıktı filtresine takılırsa modelden bir kez yeniden yazması istenir (+1 çağrı); düzeltilen metin de aynı filtreden geçer. Tool'lar `strict`; sistem istemi ve tool tanımları prompt cache'lenir; geçmişten son 6 mesaj gönderilir.
 - **Yedek:** API anahtarı yok, limit doldu, API hatası/zaman aşımı/ret ya da geçersiz JSON → kural tabanlı koç (`guardrail_action=llm_fallback` veya `budget_exceeded`). Haftalık hekim anlatısı üretilemezse deterministik şablon.
 - **Haftalık anlatı:** LLM, hekim için olgusal bir Türkçe anlatı yazar ("Dikkat:" bayraklarıyla); çıktı doğrulayıcıdan geçer, yasal uyarı eklenir, hasta/gün/veri parmak izi başına önbelleğe alınır. Yanıtta `narrative_source` ve `missed_by_time_of_day` alanları da bulunur.
 - **Gizlilik:** LLM'e ad, e-posta veya kullanıcı kimliği gönderilmez; yalnızca mesaj ve sayısal özetler.
@@ -502,7 +504,7 @@ Tam liste: [final rapor §12](docs/M5/final-rapor.md#12-sınırlılıklar).
 - **Kural tabanlı guardrail'lerin recall sınırı vardır;** çıktı doğrulayıcı, ölçüm eşikleri ve hekime yönlendirme ikinci savunma hattıdır.
 - **Eşik değerleri** genel kabul gören değerlerdir; danışman hekim onayı ve hasta bazlı hedefler gerekir.
 - **Hekim hesabı** serbest kayıtla açılır; gerçek kullanımda yönetici onayı gerekir.
-- **Tek süreç zamanlayıcı** (APScheduler API içinde); yatay ölçeklemede ayrı worker gerekir.
+- **Zamanlayıcı tek liderde** (APScheduler ayrı `worker` servisinde; birden çok worker kopyasında PostgreSQL advisory lock ile yalnızca lider çalıştırır, `app/services/leader.py`). Sunucu kapalıyken kaçan hatırlatmalar sonradan gönderilmez.
 - **iOS'ta web push** yalnızca 16.4+ ve ana ekrana eklenmiş uygulamada çalışır.
 - **Koç yanıt kalitesi** insan/klinisyen değerlendirmesiyle ölçülmedi; `python -m scripts.eval_coach --live` (`backend/scripts/eval_coach.py`) 232 senaryoyu gerçek Claude'a karşı koşabilir (gelecek çalışma).
 - **Eğitim içeriği** (31 kürate kayıt) klinisyen tarafından gözden geçirilmedi (`reviewed: false`).

@@ -161,7 +161,7 @@ ilac-kocu/
 5. **Her LLM yolunun deterministik yedeği var.** API anahtarı yok, bütçe doldu ya da API hatası → kural tabanlı koç; haftalık anlatı üretilemezse → istatistikten üretilen sabit şablon.
 6. **Token tarayıcı JavaScript'ine verilmez.** JWT yalnızca Next.js sunucusundaki httpOnly çerezde durur; tarayıcı yalnızca aynı kökenli `/api/proxy/*` ile konuşur, CORS ve token sızıntısı yüzeyi kalkar.
 7. **Service worker sağlık verisini saklamaz.** `/api/*` yanıtları ve kişiye özel HTML önbelleğe alınmaz; yalnızca kişisel veri içermeyen kabuk dosyaları saklanır.
-8. **Tek süreç zamanlayıcı.** APScheduler API süreci içinde koşar; proje ölçeğinde yeterli, yatay ölçeklemede ayrı worker'a taşınmalıdır (bkz. final rapor, sınırlılıklar).
+8. **Zamanlayıcı ayrı worker'da, tek liderde.** İlk tasarımda APScheduler API süreci içindeydi; şimdi ayrı `worker` servisinde (`python -m app.worker`) koşar. Birden çok worker kopyasında yalnızca PostgreSQL advisory lock'u tutan lider zamanlayıcıyı çalıştırır (`app/services/leader.py`); API içinde çalıştırma yalnızca tek süreçli geliştirme içindir (`RUN_SCHEDULER_IN_API=true`).
 
 ## 6. Gerçekleşen sistem
 
