@@ -137,7 +137,7 @@ Ayrıntı: [openfda-entegrasyonu.md](openfda-entegrasyonu.md).
 | Metot | Yol | Rol | Açıklama | Hata kodları | Kilometre taşı |
 |---|---|---|---|---|---|
 | GET | `/education?kind=&tag=` | Giriş | Eğitim içerikleri (`kind`: curated/openfda) | 422 | M4 |
-| GET | `/education/search?q=&k=3&tags=` | Giriş | Anlamsal + anahtar kelime hibrit arama; ilgisiz sorguda boş liste | 422 | M4 |
+| GET | `/education/search?q=&k=3&tags=` | Giriş | Vektör (kosinüs) + anahtar kelime hibrit arama (varsayılan yerel embedding sözcükseldir; anlamsal model isteğe bağlı); ilgisiz sorguda boş liste | 422 | M4 |
 | POST | `/education/ingest-drug?name=` | Giriş | openFDA etiketini eğitim içeriğine ekler (aynı etken madde için idempotent); 201 | 404, 422 içerik çıkarılamadı, 503 | M4 |
 
 ### coach
